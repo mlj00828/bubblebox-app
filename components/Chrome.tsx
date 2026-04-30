@@ -2,19 +2,19 @@ import Link from "next/link";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 backdrop-blur" style={{
-      background: "rgba(240, 251, 255, 0.85)",
-      borderBottom: "1px solid var(--color-rule)",
-    }}>
+    <header
+      className="sticky top-0 z-50 backdrop-blur"
+      style={{
+        background: "rgba(240, 251, 255, 0.85)",
+        borderBottom: "1px solid var(--color-rule)",
+      }}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-8 md:py-4">
         <Link href="/" className="flex items-center gap-2 no-underline">
           <Logo />
           <span
-            className="text-xl font-semibold tracking-tight"
-            style={{
-              fontFamily: "var(--font-display)",
-              color: "var(--color-ink)",
-            }}
+            className="text-xl font-bold tracking-tight"
+            style={{ color: "var(--color-ink)" }}
           >
             BubbleBox
           </span>
@@ -36,8 +36,15 @@ export function Header() {
             How it works
           </Link>
           <Link
+            href="/#reviews"
+            className="text-sm font-medium no-underline"
+            style={{ color: "var(--color-ink)" }}
+          >
+            Reviews
+          </Link>
+          <Link
             href="/book"
-            className="rounded-full px-5 py-2 text-sm font-medium text-white no-underline transition-transform hover:-translate-y-0.5"
+            className="rounded-full px-5 py-2 text-sm font-semibold text-white no-underline transition-transform hover:-translate-y-0.5"
             style={{ background: "var(--color-accent)" }}
           >
             Book now
@@ -47,7 +54,7 @@ export function Header() {
         {/* Mobile: just the CTA */}
         <Link
           href="/book"
-          className="rounded-full px-4 py-2 text-sm font-medium text-white no-underline md:hidden"
+          className="rounded-full px-4 py-2 text-sm font-semibold text-white no-underline md:hidden"
           style={{ background: "var(--color-accent)" }}
         >
           Book
@@ -74,30 +81,65 @@ export function Footer() {
               <Logo light />
               <span
                 style={{
-                  fontFamily: "var(--font-display)",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   fontSize: "1.25rem",
                   color: "white",
+                  letterSpacing: "-0.02em",
                 }}
               >
                 BubbleBox
               </span>
             </Link>
-            <p className="mt-3 max-w-xs text-sm" style={{ color: "rgba(255,255,255,0.65)" }}>
-              Trusted cleaning, booked in minutes. Connecting Atlanta with carefully vetted cleaning professionals since 2026.
+            <p
+              className="mt-3 max-w-xs text-sm"
+              style={{ color: "rgba(255,255,255,0.65)" }}
+            >
+              Trusted cleaning, booked in minutes. Connecting Atlanta with
+              carefully vetted cleaning professionals since 2026.
             </p>
           </div>
 
           <div>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: "white" }}>
+            <h4
+              className="mb-3 text-xs font-semibold uppercase tracking-widest"
+              style={{ color: "white" }}
+            >
               Company
             </h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/#services" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>Services</Link></li>
-              <li><Link href="/#how" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>How it works</Link></li>
-              <li><Link href="/book" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>Book a cleaning</Link></li>
               <li>
-                <a href="mailto:bubbleboxusa@gmail.com" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>
+                <Link
+                  href="/#services"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  Services
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/#how"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  How it works
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/book"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  Book a cleaning
+                </Link>
+              </li>
+              <li>
+                <a
+                  href="mailto:bubbleboxusa@gmail.com"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
                   Contact
                 </a>
               </li>
@@ -105,29 +147,67 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: "white" }}>
+            <h4
+              className="mb-3 text-xs font-semibold uppercase tracking-widest"
+              style={{ color: "white" }}
+            >
               Legal
             </h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/sms-terms" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>SMS Terms</Link></li>
-              <li><Link href="/privacy" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>Privacy Policy</Link></li>
-              <li><Link href="/terms" className="no-underline" style={{ color: "rgba(255,255,255,0.7)" }}>Terms of Service</Link></li>
+              <li>
+                <Link
+                  href="/sms-terms"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  SMS Terms
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/privacy"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/terms"
+                  className="no-underline"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  Terms of Service
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
 
         <div
           className="mt-12 flex flex-col gap-2 border-t pt-6 text-xs md:flex-row md:justify-between"
-          style={{ borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.5)" }}
+          style={{
+            borderColor: "rgba(255,255,255,0.15)",
+            color: "rgba(255,255,255,0.5)",
+          }}
         >
           <span>© 2026 BubbleBox. All rights reserved.</span>
           <span>
-            Atlanta, GA · {" "}
-            <a href="tel:+16788204881" className="no-underline" style={{ color: "rgba(255,255,255,0.5)" }}>
+            Atlanta, GA ·{" "}
+            <a
+              href="tel:+16788204881"
+              className="no-underline"
+              style={{ color: "rgba(255,255,255,0.5)" }}
+            >
               +1 (678) 820-4881
             </a>{" "}
             ·{" "}
-            <a href="mailto:bubbleboxusa@gmail.com" className="no-underline" style={{ color: "rgba(255,255,255,0.5)" }}>
+            <a
+              href="mailto:bubbleboxusa@gmail.com"
+              className="no-underline"
+              style={{ color: "rgba(255,255,255,0.5)" }}
+            >
               bubbleboxusa@gmail.com
             </a>
           </span>

@@ -60,26 +60,16 @@ export default function ConfirmPage() {
       <main className="mx-auto max-w-2xl px-4 py-12 md:px-8 md:py-20">
         <div className="text-center">
           <div
-            className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full"
-            style={{
-              background: "var(--color-surface)",
-              fontSize: "2rem",
-            }}
+            className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold text-white"
+            style={{ background: "var(--color-success)" }}
           >
             ✓
           </div>
-          <h1
-            className="text-4xl leading-tight md:text-5xl"
-            style={{
-              fontFamily: "var(--font-display)",
-              fontWeight: 500,
-              color: "var(--color-ink)",
-            }}
-          >
+          <h1 className="text-3xl font-extrabold md:text-4xl">
             Booking received
           </h1>
-          <p className="mt-4 text-lg" style={{ color: "var(--color-muted)" }}>
-            We're matching you with a pro. You'll get a text shortly.
+          <p className="mt-3 text-lg" style={{ color: "var(--color-muted)" }}>
+            We&apos;re matching you with a pro. You&apos;ll get a text shortly.
           </p>
         </div>
 
@@ -91,7 +81,7 @@ export default function ConfirmPage() {
 
         {error && (
           <div
-            className="mt-10 rounded-lg p-5 text-sm"
+            className="mt-10 rounded-xl p-5 text-sm"
             style={{
               background: "var(--color-surface)",
               border: "1px solid var(--color-rule)",
@@ -106,7 +96,7 @@ export default function ConfirmPage() {
           <div
             className="mt-10 overflow-hidden rounded-2xl"
             style={{
-              background: "var(--color-paper)",
+              background: "white",
               border: "1px solid var(--color-rule)",
             }}
           >
@@ -114,30 +104,17 @@ export default function ConfirmPage() {
               className="flex items-center justify-between p-5"
               style={{ background: "var(--color-surface)" }}
             >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{booking.service_icon}</span>
-                <div>
-                  <div
-                    className="text-lg"
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {booking.service_name}
-                  </div>
-                  <div className="text-xs" style={{ color: "var(--color-muted)" }}>
-                    Booking #{booking.id.replace(/^bk_/, "")}
-                  </div>
+              <div>
+                <div className="text-lg font-bold">
+                  {booking.service_icon} {booking.service_name}
+                </div>
+                <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  Booking #{booking.id.replace(/^bk_/, "")}
                 </div>
               </div>
               <div
-                className="text-2xl"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontWeight: 500,
-                  color: "var(--color-accent-deep)",
-                }}
+                className="text-2xl font-extrabold"
+                style={{ color: "var(--color-accent-deep)" }}
               >
                 {formatPrice(booking.estimated_total_cents)}
               </div>
@@ -148,10 +125,7 @@ export default function ConfirmPage() {
               <Row label="Where" value={booking.address_line} />
               <Row label="Customer" value={booking.customer_name} />
               <Row label="Phone" value={formatPhoneForDisplay(booking.customer_phone)} />
-              <Row
-                label="Status"
-                value={statusLabel(booking.status)}
-              />
+              <Row label="Status" value={statusLabel(booking.status)} />
             </dl>
           </div>
         )}
@@ -159,7 +133,7 @@ export default function ConfirmPage() {
         <div className="mt-10 text-center">
           <Link
             href="/"
-            className="rounded-full px-6 py-3 font-medium text-white no-underline"
+            className="rounded-full px-6 py-3 font-bold text-white no-underline"
             style={{ background: "var(--color-accent)" }}
           >
             Back to home
@@ -183,7 +157,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 px-5 py-3 text-sm">
       <dt style={{ color: "var(--color-muted)" }}>{label}</dt>
-      <dd className="text-right" style={{ color: "var(--color-ink)" }}>
+      <dd className="text-right font-medium" style={{ color: "var(--color-ink)" }}>
         {value}
       </dd>
     </div>

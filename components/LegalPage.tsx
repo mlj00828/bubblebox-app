@@ -13,19 +13,15 @@ export function LegalPage({
     <>
       <Header />
       <main className="mx-auto max-w-2xl px-4 py-12 md:px-8 md:py-20">
-        <h1
-          className="text-4xl leading-tight md:text-5xl"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontWeight: 500,
-            color: "var(--color-ink)",
-          }}
-        >
+        <h1 className="text-3xl font-extrabold md:text-4xl">
           {title}
         </h1>
         <p
           className="mt-3 border-b pb-6 text-sm"
-          style={{ borderColor: "var(--color-rule)", color: "var(--color-muted)" }}
+          style={{
+            borderColor: "var(--color-rule)",
+            color: "var(--color-muted)",
+          }}
         >
           Last updated: {updated}
         </p>
@@ -35,11 +31,11 @@ export function LegalPage({
       <style>{`
         .legal-prose { color: var(--color-ink); line-height: 1.7; }
         .legal-prose h2 {
-          font-family: var(--font-display);
-          font-weight: 500;
-          font-size: 1.6rem;
-          margin-top: 3rem;
-          margin-bottom: 1rem;
+          font-weight: 700;
+          font-size: 1.5rem;
+          margin-top: 2.5rem;
+          margin-bottom: 0.75rem;
+          letter-spacing: -0.02em;
         }
         .legal-prose p { margin-bottom: 1.25rem; }
         .legal-prose ul { margin: 0 0 1.25rem 1.5rem; }
@@ -52,7 +48,7 @@ export function LegalPage({
         .callout {
           background: var(--color-surface);
           padding: 1.5rem 1.75rem;
-          border-radius: 0.5rem;
+          border-radius: 0.75rem;
           border-left: 3px solid var(--color-accent);
           margin: 1.5rem 0 2rem;
         }

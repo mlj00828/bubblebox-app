@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Header, Footer } from "@/components/Chrome";
 import { SERVICES, formatPrice, type ServiceId } from "@/lib/services";
 import { isInServiceArea } from "@/lib/service-area";
@@ -29,8 +30,30 @@ interface FormState {
 
 const STEPS = ["Service", "When & where", "Details", "Contact", "Review"] as const;
 
-export default function BookPage() {
+export default function BookPageWrapper() {
+  return (
+    <Suspense fallback={<BookPageShell />}>
+      <BookPage />
+    </Suspense>
+  );
+}
+
+function BookPageShell() {
+  return (
+    <>
+      <Header />
+      <main className="mx-auto max-w-2xl px-4 py-8 md:px-8 md:py-16">
+        <div className="h-8 w-48 animate-pulse rounded bg-[var(--color-surface)]" />
+        <div className="mt-6 h-64 animate-pulse rounded-xl bg-[var(--color-surface)]" />
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+function BookPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -46,8 +69,29 @@ export default function BookPage() {
     phone: "",
   });
 
-  const selectedService = SERVICES.find((s) => s.id === form.serviceId) ?? null;
+  // Read URL params on mount
+  useEffect(() => {
+    const urlZip = searchParams.get("zip");
+    const urlService = searchParams.get("service");
+    const patch: Partial<FormState> = {};
 
+    if (urlZip && /^\d{5}$/.test(urlZip) && isInServiceArea(urlZip)) {
+      patch.zip = urlZip;
+    }
+    if (urlService && SERVICES.some((s) => s.id === urlService)) {
+      patch.serviceId = urlService as ServiceId;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      setForm((f) => ({ ...f, ...patch }));
+      // If service was pre-selected from the homepage card, skip step 0
+      if (patch.serviceId) {
+        setStep(1);
+      }
+    }
+  }, [searchParams]);
+
+  const selectedService = SERVICES.find((s) => s.id === form.serviceId) ?? null;
   const stepValid = validateStep(step, form);
 
   function next() {
@@ -85,12 +129,10 @@ export default function BookPage() {
         },
       });
 
-      // Stash phone for the confirmation page (the backend requires it
-      // to look up the booking — protects against ID guessing).
       try {
         sessionStorage.setItem(`booking-phone-${res.id}`, phoneE164);
       } catch {
-        // sessionStorage might be blocked; the confirm page handles that
+        // sessionStorage might be blocked
       }
 
       router.push(`/book/confirm/${res.id}`);
@@ -122,7 +164,7 @@ export default function BookPage() {
         <div className="mb-8">
           <div className="mb-2 flex items-center justify-between">
             <span
-              className="text-xs font-semibold uppercase tracking-widest"
+              className="text-xs font-bold uppercase tracking-widest"
               style={{ color: "var(--color-accent-deep)" }}
             >
               Step {step + 1} of {STEPS.length}
@@ -132,11 +174,11 @@ export default function BookPage() {
             </span>
           </div>
           <div
-            className="h-1 overflow-hidden rounded-full"
+            className="h-1.5 overflow-hidden rounded-full"
             style={{ background: "var(--color-surface)" }}
           >
             <div
-              className="h-full transition-all"
+              className="h-full transition-all duration-300"
               style={{
                 width: `${((step + 1) / STEPS.length) * 100}%`,
                 background: "var(--color-accent)",
@@ -145,14 +187,7 @@ export default function BookPage() {
           </div>
         </div>
 
-        <h1
-          className="mb-8 text-4xl leading-tight md:text-5xl"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontWeight: 500,
-            color: "var(--color-ink)",
-          }}
-        >
+        <h1 className="mb-8 text-3xl font-extrabold md:text-4xl">
           {stepHeading(step)}
         </h1>
 
@@ -190,7 +225,7 @@ export default function BookPage() {
         {/* Server error */}
         {serverError && (
           <div
-            className="mt-6 rounded-lg p-4 text-sm"
+            className="mt-6 rounded-xl p-4 text-sm font-medium"
             style={{
               background: "rgba(239, 68, 68, 0.08)",
               border: "1px solid rgba(239, 68, 68, 0.3)",
@@ -208,7 +243,7 @@ export default function BookPage() {
             <button
               type="button"
               onClick={back}
-              className="rounded-full px-5 py-2.5 font-medium"
+              className="rounded-full px-5 py-2.5 font-semibold"
               style={{
                 background: "transparent",
                 color: "var(--color-ink)",
@@ -227,7 +262,7 @@ export default function BookPage() {
               type="button"
               onClick={next}
               disabled={!stepValid}
-              className="rounded-full px-6 py-3 font-medium text-white transition-opacity disabled:opacity-40"
+              className="rounded-full px-6 py-3 font-bold text-white transition-opacity disabled:opacity-40"
               style={{ background: "var(--color-accent)" }}
             >
               Continue →
@@ -237,7 +272,7 @@ export default function BookPage() {
               type="button"
               onClick={submit}
               disabled={!stepValid || submitting}
-              className="rounded-full px-6 py-3 font-medium text-white transition-opacity disabled:opacity-60"
+              className="rounded-full px-6 py-3 font-bold text-white transition-opacity disabled:opacity-60"
               style={{ background: "var(--color-accent)" }}
             >
               {submitting ? "Booking..." : "Confirm booking"}
@@ -245,7 +280,10 @@ export default function BookPage() {
           )}
         </div>
 
-        <p className="mt-6 text-center text-xs" style={{ color: "var(--color-muted)" }}>
+        <p
+          className="mt-6 text-center text-xs"
+          style={{ color: "var(--color-muted)" }}
+        >
           By booking you agree to our{" "}
           <Link href="/terms" className="underline">Terms</Link>,{" "}
           <Link href="/privacy" className="underline">Privacy Policy</Link>, and{" "}
@@ -277,44 +315,46 @@ function ServiceStep({
             key={s.id}
             type="button"
             onClick={() => onChange(s.id)}
-            className="rounded-2xl p-5 text-left transition-all"
+            className="relative overflow-hidden rounded-2xl text-left transition-all"
             style={{
-              background: selected ? "var(--color-surface)" : "var(--color-paper)",
-              border: `2px solid ${selected ? "var(--color-accent)" : "var(--color-rule)"}`,
+              background: selected ? "var(--color-surface)" : "white",
+              border: `2px solid ${
+                selected ? "var(--color-accent)" : "var(--color-rule)"
+              }`,
             }}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">{s.icon}</span>
-                <div>
-                  <h3
-                    className="text-lg"
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontWeight: 500,
-                      color: "var(--color-ink)",
-                    }}
+            <div className="flex items-center gap-4 p-4">
+              {/* Thumbnail */}
+              <img
+                src={s.imageUrl}
+                alt={s.imageAlt}
+                className="h-16 w-20 flex-shrink-0 rounded-lg object-cover"
+                loading="lazy"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-bold" style={{ color: "var(--color-ink)" }}>
+                      {s.name}
+                      {s.popular && (
+                        <span
+                          className="ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase text-white"
+                          style={{ background: "var(--color-accent)", verticalAlign: "middle" }}
+                        >
+                          Popular
+                        </span>
+                      )}
+                    </h3>
+                    <p className="mt-0.5 text-sm" style={{ color: "var(--color-muted)" }}>
+                      {s.shortDescription} · {s.durationHint}
+                    </p>
+                  </div>
+                  <span
+                    className="text-xl font-extrabold"
+                    style={{ color: "var(--color-accent-deep)" }}
                   >
-                    {s.name}
-                  </h3>
-                  <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                    {s.shortDescription}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div
-                  className="text-2xl"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontWeight: 500,
-                    color: "var(--color-accent-deep)",
-                  }}
-                >
-                  {formatPrice(s.basePriceCents)}
-                </div>
-                <div className="text-xs" style={{ color: "var(--color-muted)" }}>
-                  {s.durationHint}
+                    {formatPrice(s.basePriceCents)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -344,27 +384,29 @@ function WhenWhereStep({
           pattern="[0-9]{5}"
           maxLength={5}
           value={form.zip}
-          onChange={(e) => onChange({ zip: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+          onChange={(e) =>
+            onChange({ zip: e.target.value.replace(/\D/g, "").slice(0, 5) })
+          }
           placeholder="30309"
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: `1px solid ${
+            background: "white",
+            border: `2px solid ${
               !zipValid ? "var(--color-danger)" : "var(--color-rule)"
             }`,
           }}
         />
         {form.zip.length === 5 && !zipInArea && (
-          <p className="mt-2 text-sm" style={{ color: "var(--color-danger)" }}>
-            Sorry, we don't serve {form.zip} yet.{" "}
+          <p className="mt-2 text-sm font-medium" style={{ color: "var(--color-danger)" }}>
+            Sorry, we don&apos;t serve {form.zip} yet.{" "}
             <a href="mailto:bubbleboxusa@gmail.com" className="underline">
               Email us
             </a>{" "}
-            and we'll let you know when we expand.
+            and we&apos;ll let you know when we expand.
           </p>
         )}
         {zipInArea && (
-          <p className="mt-2 text-sm" style={{ color: "var(--color-success)" }}>
+          <p className="mt-2 text-sm font-medium" style={{ color: "var(--color-success)" }}>
             ✓ We service this area
           </p>
         )}
@@ -376,36 +418,40 @@ function WhenWhereStep({
           value={form.date}
           min={defaultDate()}
           onChange={(e) => onChange({ date: e.target.value })}
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-rule)",
+            background: "white",
+            border: "2px solid var(--color-rule)",
           }}
         />
       </Field>
 
       <Field label="Time of day">
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {(["morning", "afternoon", "evening", "anytime"] as const).map((w) => {
-            const selected = form.window === w;
-            return (
-              <button
-                key={w}
-                type="button"
-                onClick={() => onChange({ window: w })}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium capitalize transition-all"
-                style={{
-                  background: selected ? "var(--color-accent)" : "var(--color-paper)",
-                  color: selected ? "white" : "var(--color-ink)",
-                  border: `1px solid ${
-                    selected ? "var(--color-accent)" : "var(--color-rule)"
-                  }`,
-                }}
-              >
-                {w}
-              </button>
-            );
-          })}
+          {(["morning", "afternoon", "evening", "anytime"] as const).map(
+            (w) => {
+              const selected = form.window === w;
+              return (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => onChange({ window: w })}
+                  className="rounded-xl px-3 py-2.5 text-sm font-semibold capitalize transition-all"
+                  style={{
+                    background: selected
+                      ? "var(--color-accent)"
+                      : "white",
+                    color: selected ? "white" : "var(--color-ink)",
+                    border: `2px solid ${
+                      selected ? "var(--color-accent)" : "var(--color-rule)"
+                    }`,
+                  }}
+                >
+                  {w}
+                </button>
+              );
+            }
+          )}
         </div>
       </Field>
     </div>
@@ -430,10 +476,10 @@ function DetailsStep({
           value={form.addressLine}
           onChange={(e) => onChange({ addressLine: e.target.value })}
           placeholder="123 Main St, Atlanta, GA"
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-rule)",
+            background: "white",
+            border: "2px solid var(--color-rule)",
           }}
         />
       </Field>
@@ -447,12 +493,11 @@ function DetailsStep({
           onChange={(e) => onChange({ notes: e.target.value })}
           placeholder="Two cats, code 1234 at the gate..."
           rows={4}
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-rule)",
+            background: "white",
+            border: "2px solid var(--color-rule)",
             resize: "vertical",
-            fontFamily: "inherit",
           }}
         />
       </Field>
@@ -476,10 +521,10 @@ function ContactStep({
           onChange={(e) => onChange({ name: e.target.value })}
           placeholder="Morgan Jefferson"
           autoComplete="name"
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-rule)",
+            background: "white",
+            border: "2px solid var(--color-rule)",
           }}
         />
       </Field>
@@ -495,10 +540,10 @@ function ContactStep({
           placeholder="(404) 555-0100"
           autoComplete="tel"
           inputMode="tel"
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-rule)",
+            background: "white",
+            border: "2px solid var(--color-rule)",
           }}
         />
       </Field>
@@ -511,10 +556,10 @@ function ContactStep({
           placeholder="you@example.com"
           autoComplete="email"
           inputMode="email"
-          className="w-full rounded-lg px-4 py-3 text-base"
+          className="w-full rounded-xl px-4 py-3 text-base"
           style={{
-            background: "var(--color-paper)",
-            border: "1px solid var(--color-rule)",
+            background: "white",
+            border: "2px solid var(--color-rule)",
           }}
         />
       </Field>
@@ -527,13 +572,13 @@ function ReviewStep({
   service,
 }: {
   form: FormState;
-  service: { name: string; icon: string; basePriceCents: number };
+  service: { name: string; basePriceCents: number; imageUrl: string };
 }) {
   return (
     <div
       className="overflow-hidden rounded-2xl"
       style={{
-        background: "var(--color-paper)",
+        background: "white",
         border: "1px solid var(--color-rule)",
       }}
     >
@@ -542,16 +587,13 @@ function ReviewStep({
         style={{ background: "var(--color-surface)" }}
       >
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{service.icon}</span>
+          <img
+            src={service.imageUrl}
+            alt=""
+            className="h-12 w-16 rounded-lg object-cover"
+          />
           <div>
-            <div
-              className="text-lg"
-              style={{
-                fontFamily: "var(--font-display)",
-                fontWeight: 500,
-                color: "var(--color-ink)",
-              }}
-            >
+            <div className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
               {service.name}
             </div>
             <div className="text-xs" style={{ color: "var(--color-muted)" }}>
@@ -560,12 +602,8 @@ function ReviewStep({
           </div>
         </div>
         <div
-          className="text-3xl"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontWeight: 500,
-            color: "var(--color-accent-deep)",
-          }}
+          className="text-3xl font-extrabold"
+          style={{ color: "var(--color-accent-deep)" }}
         >
           {formatPrice(service.basePriceCents)}
         </div>
@@ -573,7 +611,7 @@ function ReviewStep({
 
       <dl className="divide-y" style={{ borderColor: "var(--color-rule)" }}>
         <Row label="When" value={`${formatDate(form.date)} · ${form.window}`} />
-        <Row label="Where" value={`${form.addressLine}`} />
+        <Row label="Where" value={form.addressLine} />
         <Row label="ZIP" value={form.zip} />
         {form.notes && <Row label="Notes" value={form.notes} />}
         <Row label="Name" value={form.name} />
@@ -597,18 +635,12 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span
-        className="mb-2 block text-sm font-medium"
-        style={{ color: "var(--color-ink)" }}
-      >
+      <span className="mb-2 block text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
         {label}
       </span>
       {children}
       {hint && (
-        <span
-          className="mt-2 block text-xs"
-          style={{ color: "var(--color-muted)" }}
-        >
+        <span className="mt-2 block text-xs" style={{ color: "var(--color-muted)" }}>
           {hint}
         </span>
       )}
@@ -620,7 +652,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 px-5 py-3 text-sm">
       <dt style={{ color: "var(--color-muted)" }}>{label}</dt>
-      <dd className="text-right" style={{ color: "var(--color-ink)" }}>
+      <dd className="text-right font-medium" style={{ color: "var(--color-ink)" }}>
         {value}
       </dd>
     </div>
@@ -651,9 +683,7 @@ function validateStep(step: number, form: FormState): boolean {
     case 2:
       return form.addressLine.trim().length >= 5;
     case 3:
-      return (
-        form.name.trim().length >= 2 && toE164USPhone(form.phone) !== null
-      );
+      return form.name.trim().length >= 2 && toE164USPhone(form.phone) !== null;
     case 4:
       return true;
     default:
@@ -663,7 +693,7 @@ function validateStep(step: number, form: FormState): boolean {
 
 function defaultDate(): string {
   const d = new Date();
-  d.setDate(d.getDate() + 1); // tomorrow
+  d.setDate(d.getDate() + 1);
   return d.toISOString().slice(0, 10);
 }
 

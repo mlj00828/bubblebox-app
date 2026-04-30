@@ -16,10 +16,10 @@
   --color-success: #10B981;
   --color-danger: #EF4444;
 
-  --font-display: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  /* Single sans-serif system: Inter for everything. */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  --radius-card: 1rem;
+  --radius-card: 1.25rem;
   --radius-button: 999px;
 }
 
@@ -32,6 +32,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -41,8 +42,10 @@ body {
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
   min-height: 100dvh;
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -63,17 +66,20 @@ button {
 
 input, select, textarea {
   font-family: inherit;
-  font-size: inherit;
+  font-size: 16px; /* prevent iOS zoom on focus */
 }
 
-/* iOS input zoom prevention */
-input, select, textarea {
-  font-size: 16px;
+/* Headline weight scale */
+h1, h2, h3, h4 {
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
