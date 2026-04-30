@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Offline · BubbleBox</title>
+<style>
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #F0FBFF;
+    color: #0F1729;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  .card {
+    max-width: 400px;
+    text-align: center;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  p { color: #64748B; line-height: 1.6; }
+  .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+  }
+  button {
+    margin-top: 2rem;
+    background: #0EA5E9;
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🫧</div>
+    <h1>You're offline</h1>
+    <p>BubbleBox needs an internet connection to book your cleaning. Check your signal and try again.</p>
+    <button onclick="window.location.reload()">Try again</button>
+  </div>
+</body>
+</html>
