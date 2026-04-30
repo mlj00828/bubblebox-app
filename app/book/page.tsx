@@ -427,8 +427,8 @@ function WhenWhereStep({
       </Field>
 
       <Field label="Time of day">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {(["morning", "afternoon", "evening", "anytime"] as const).map(
+        <div className="grid grid-cols-3 gap-2">
+          {(["morning", "afternoon", "evening"] as const).map(
             (w) => {
               const selected = form.window === w;
               return (
@@ -519,7 +519,7 @@ function ContactStep({
           type="text"
           value={form.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="Morgan Jefferson"
+          placeholder="Your full name"
           autoComplete="name"
           className="w-full rounded-xl px-4 py-3 text-base"
           style={{
