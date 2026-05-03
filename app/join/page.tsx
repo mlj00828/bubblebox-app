@@ -102,7 +102,7 @@ export default function JoinPage() {
       .filter((z, i, arr) => arr.indexOf(z) === i);
 
     try {
-      const res = await fetch(`${API_BASE}/api/pros/apply`, {
+      const res = await fetch(`${API_BASE}/api/pros/applications/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
