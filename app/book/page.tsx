@@ -193,7 +193,7 @@ function BookPageInner() {
   }
 
   const price = calcTotal();
-  const showPriceBar = step < 9;
+  const showPriceBar = step <= 9;
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-paper)", fontFamily: "var(--font-sans)", display: "flex", flexDirection: "column" }}>
