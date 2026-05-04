@@ -614,7 +614,7 @@ function StepHeader({ eyebrow, title, sub }: { eyebrow: string; title: string; s
   );
 }
 
-function TextInput({ label, placeholder, value, onChange, type = "text", inputMode, autoComplete, required, maxLength }: any) {
+function TextInput({ label, placeholder, value, onChange, type = "text", inputMode, autoComplete, required, maxLength }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; type?: string; inputMode?: any; autoComplete?: string; required?: boolean; maxLength?: number }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)" }}>{label}</label>
