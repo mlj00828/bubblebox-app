@@ -119,7 +119,7 @@ function BookPage() {
         service_id: form.serviceId,
         zip: form.zip.trim(),
         preferred_date: form.date,
-        preferred_window: form.window,
+        preferred_window: form.window === "anytime" ? "morning" : form.window,
         address_line: form.addressLine.trim(),
         notes: form.notes.trim() || undefined,
         customer: {
