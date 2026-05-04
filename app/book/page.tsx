@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BubbleLogo } from "@/components/Chrome";
@@ -73,7 +73,7 @@ function defaultState(): BookingState {
 }
 
 // ── Main component ─────────────────────────────────────────────────────
-export default function BookPage() {
+function BookPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
@@ -647,3 +647,11 @@ const btnNext: React.CSSProperties = {
 const btnPrimary: React.CSSProperties = {
   width: "100%", maxWidth: 320, background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 16, fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s", boxShadow: "0 4px 16px rgba(29,127,232,0.35)",
 };
+
+export default function BookPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Loading…</div>}>
+      <BookPageInner />
+    </Suspense>
+  );
+}
