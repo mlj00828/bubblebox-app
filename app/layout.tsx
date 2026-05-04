@@ -3,27 +3,25 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "BubbleBox — Trusted Cleaning, Booked in Minutes | Atlanta",
-    template: "%s · BubbleBox",
+    default: "BubbleBox ATL — Professional Cleaning Services in Atlanta",
+    template: "%s · BubbleBox ATL",
   },
   description:
-    "BubbleBox connects Atlanta homeowners and businesses with vetted cleaning professionals. Transparent pricing, instant booking, real humans.",
-  applicationName: "BubbleBox",
+    "Atlanta's most affordable professional cleaning service. Standard cleans from $99. Book online in minutes. Background-checked, insured, satisfaction guaranteed.",
+  applicationName: "BubbleBox ATL",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "BubbleBox",
+    title: "BubbleBox ATL",
   },
-  formatDetection: {
-    telephone: false,
-  },
+  formatDetection: { telephone: false },
   openGraph: {
-    title: "BubbleBox — Trusted Cleaning, Booked in Minutes",
+    title: "BubbleBox ATL — Professional Cleaning Services in Atlanta",
     description:
-      "Atlanta cleaning marketplace. Book in seconds, get matched with a vetted pro.",
+      "Background-checked cleaners serving Atlanta & Metro Atlanta. Book online in 60 seconds.",
     url: "https://homeproatl.xyz",
-    siteName: "BubbleBox",
+    siteName: "BubbleBox ATL",
     type: "website",
   },
   icons: {
@@ -39,30 +37,17 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#F0FBFF",
+  themeColor: "#1D7FE8",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin=""
-        />
-        <link
-          rel="preconnect"
-          href="https://images.unsplash.com"
-          crossOrigin=""
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -70,13 +55,7 @@ export default function RootLayout({
         {children}
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch(() => {});
-                });
-              }
-            `,
+            __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});})}`,
           }}
         />
       </body>

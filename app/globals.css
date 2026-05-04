@@ -1,1 +1,88 @@
-$(cat /home/claude/bubblebox-rebuild/globals.css)
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #F5FBFF;
+  --color-surface: #EBF5FF;
+  --color-surface-mid: #D6EEFF;
+  --color-accent: #1D7FE8;
+  --color-accent-hover: #1a6ed0;
+  --color-accent-mid: #2563EB;
+  --color-accent-light: #60B4FF;
+  --color-accent-deep: #0A2FA8;
+  --color-ink: #0D1B3E;
+  --color-ink-mid: #3B5280;
+  --color-muted: #7B9DC7;
+  --color-rule: #C8E0F8;
+  --color-white: #FFFFFF;
+  --color-warning: #F59E0B;
+  --color-success: #10B981;
+  --color-danger: #EF4444;
+  --color-gold: #FFD700;
+
+  --font-display: "DM Serif Display", Georgia, serif;
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+
+  --radius-card: 1rem;
+  --radius-button: 999px;
+
+  --shadow-card: 0 4px 24px rgba(29,127,232,0.13);
+  --shadow-soft: 0 2px 16px rgba(29,127,232,0.10);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  min-height: 100dvh;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--color-accent-deep);
+  text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 16px;
+}
+
+h1, h2, h3, h4 {
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

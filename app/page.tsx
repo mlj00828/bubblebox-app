@@ -1,31 +1,28 @@
 "use client";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Header, Footer } from "@/components/Chrome";
 import { SERVICES, formatPrice } from "@/lib/services";
 import { isInServiceArea } from "@/lib/service-area";
 
-const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&h=800&q=80";
+const S = {
+  // inline style helpers
+  eyebrow: { fontSize: 12, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" as const, color: "var(--color-accent)", marginBottom: 10 },
+  sectionTitle: { fontFamily: "var(--font-display)", fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.15, letterSpacing: "-0.5px", color: "var(--color-ink)", marginBottom: 12 },
+  sectionSub: { fontSize: 16, color: "var(--color-ink-mid)", maxWidth: 540, margin: "0 auto", lineHeight: 1.6 },
+};
 
 export default function Home() {
   const router = useRouter();
   const [zip, setZip] = useState("");
   const [zipError, setZipError] = useState("");
+  const [faqOpen, setFaqOpen] = useState<number | null>(null);
 
-  function handleZipSubmit() {
+  function handleZip() {
     const z = zip.trim();
-    if (z.length !== 5) {
-      setZipError("Enter a 5-digit ZIP code");
-      return;
-    }
-    if (!isInServiceArea(z)) {
-      setZipError(`We don't serve ${z} yet — email us and we'll let you know when we expand.`);
-      return;
-    }
+    if (z.length !== 5) { setZipError("Enter a 5-digit ZIP code"); return; }
+    if (!isInServiceArea(z)) { setZipError(`We don't serve ${z} yet — contact us and we'll let you know when we expand.`); return; }
     setZipError("");
     router.push(`/book?zip=${z}`);
   }
@@ -34,559 +31,352 @@ export default function Home() {
     <>
       <Header />
 
-      <main>
-        {/* ======= HERO ======= */}
-        <section className="relative overflow-hidden">
-          {/* Background photo — covers entire hero on desktop */}
-          <div className="absolute inset-0 hidden md:block">
-            <img
-              src={HERO_IMAGE}
-              alt=""
-              className="h-full w-full object-cover"
-              style={{ filter: "brightness(0.35)" }}
-            />
-          </div>
+      {/* ── PROMO BANNER ── */}
+      <div style={{ background: "linear-gradient(90deg, var(--color-accent-deep) 0%, var(--color-accent) 100%)", color: "white", textAlign: "center", padding: "10px 20px", fontSize: 14, fontWeight: 600 }}>
+        🧹 First-time customers get <span style={{ color: "#FFD700" }}>$20 OFF</span> — Use code <span style={{ color: "#FFD700" }}>BUBBLE20</span> at checkout!
+      </div>
 
-          <div className="relative mx-auto grid max-w-6xl gap-8 px-4 py-16 md:grid-cols-[1.1fr_1fr] md:items-center md:gap-16 md:px-8 md:py-28">
-            {/* Left: headline + ZIP widget */}
-            <div className="md:text-white">
-              <div
-                className="inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest"
-                style={{
-                  background: "var(--color-surface)",
-                  color: "var(--color-accent-deep)",
-                }}
-              >
-                Atlanta · Serving 147 ZIP codes
+      <main>
+        {/* ── HERO ── */}
+        <section style={{ background: "var(--color-white)" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "60px 24px 40px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", minHeight: 560 }} className="hero-grid">
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--color-surface)", border: "1px solid var(--color-surface-mid)", borderRadius: 99, padding: "6px 14px", fontSize: 13, fontWeight: 700, color: "var(--color-accent-mid)", width: "fit-content" }}>
+                <span style={{ width: 8, height: 8, background: "#22c55e", borderRadius: "50%", display: "inline-block", animation: "pulse 2s infinite" }} />
+                Available Today in Atlanta
               </div>
 
-              <h1 className="mt-6 text-4xl font-extrabold leading-[1.08] tracking-tight md:text-6xl">
-                Trusted cleaning,
-                <br />
-                <span style={{ color: "var(--color-accent)" }}>
-                  booked in minutes.
-                </span>
+              <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(36px, 5vw, 58px)", lineHeight: 1.1, color: "var(--color-ink)", letterSpacing: "-1px" }}>
+                A <em style={{ fontStyle: "italic", color: "var(--color-accent)" }}>sparkling clean</em><br />home, on your schedule.
               </h1>
 
-              <ul className="mt-6 space-y-2 text-base md:text-lg" style={{ color: "var(--color-muted)" }}>
-                <li className="flex items-start gap-2 md:text-white/70">
-                  <span className="mt-1 text-[var(--color-accent)]">✓</span>
-                  Vetted, background-checked professionals
-                </li>
-                <li className="flex items-start gap-2 md:text-white/70">
-                  <span className="mt-1 text-[var(--color-accent)]">✓</span>
-                  Transparent pricing — no surprise fees
-                </li>
-                <li className="flex items-start gap-2 md:text-white/70">
-                  <span className="mt-1 text-[var(--color-accent)]">✓</span>
-                  Book online, get matched in under 5 minutes
-                </li>
-              </ul>
+              <p style={{ fontSize: 17, color: "var(--color-ink-mid)", lineHeight: 1.6, maxWidth: 440 }}>
+                Professional, background-checked cleaners serving Atlanta & Metro Atlanta. Book online in 60 seconds. Satisfaction guaranteed or we come back free.
+              </p>
 
-              {/* ZIP entry widget */}
-              <div className="mt-8">
-                <label
-                  htmlFor="hero-zip"
-                  className="mb-2 block text-sm font-semibold md:text-white"
-                >
-                  Enter your ZIP code to get started
+              {/* ZIP widget */}
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)", marginBottom: 8 }}>
+                  Enter your ZIP to get started:
                 </label>
-                <div className="flex gap-2">
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input
-                    id="hero-zip"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]{5}"
-                    maxLength={5}
-                    value={zip}
-                    onChange={(e) => {
-                      setZip(e.target.value.replace(/\D/g, "").slice(0, 5));
-                      setZipError("");
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && handleZipSubmit()}
+                    type="text" inputMode="numeric" maxLength={5} value={zip}
+                    onChange={e => { setZip(e.target.value.replace(/\D/g,"").slice(0,5)); setZipError(""); }}
+                    onKeyDown={e => e.key === "Enter" && handleZip()}
                     placeholder="30309"
-                    className="w-36 rounded-xl px-4 py-3 text-lg font-semibold shadow-sm"
-                    style={{
-                      background: "white",
-                      border: zipError
-                        ? "2px solid var(--color-danger)"
-                        : "2px solid var(--color-rule)",
-                      color: "var(--color-ink)",
-                    }}
+                    style={{ width: 120, padding: "14px 16px", border: `2px solid ${zipError ? "var(--color-danger)" : "var(--color-rule)"}`, borderRadius: 12, fontSize: 17, fontWeight: 700, color: "var(--color-ink)", background: "white", outline: "none" }}
                   />
-                  <button
-                    type="button"
-                    onClick={handleZipSubmit}
-                    className="rounded-xl px-6 py-3 text-base font-bold text-white shadow-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
-                    style={{ background: "var(--color-accent)" }}
-                  >
-                    Book a cleaning
+                  <button onClick={handleZip} style={{ background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: "14px 28px", fontSize: 16, fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 24px rgba(29,127,232,0.35)", transition: "all 0.2s" }}>
+                    Book a Cleaning →
                   </button>
                 </div>
-                {zipError && (
-                  <p className="mt-2 text-sm font-medium" style={{ color: "var(--color-danger)" }}>
-                    {zipError}
-                  </p>
-                )}
+                {zipError && <p style={{ marginTop: 8, fontSize: 13, color: "var(--color-danger)", fontWeight: 500 }}>{zipError}</p>}
+              </div>
+
+              <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+                {[["1,200+","Cleanings done"],["4.9★","Average rating"],["$99","Starting price"]].map(([n,l]) => (
+                  <div key={l}>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: "var(--color-ink)", letterSpacing: "-0.5px" }}>{n}</div>
+                    <div style={{ fontSize: 12, color: "var(--color-muted)", fontWeight: 500 }}>{l}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Right: hero photo for mobile (desktop uses bg image) */}
-            <div className="relative overflow-hidden rounded-2xl shadow-xl md:hidden">
-              <img
-                src={HERO_IMAGE}
-                alt="Modern clean home interior"
-                className="h-64 w-full object-cover"
-              />
-            </div>
-
-            {/* Right: trust card overlay on desktop */}
-            <div className="hidden md:block">
-              <div
-                className="rounded-2xl p-8 shadow-2xl backdrop-blur-sm"
-                style={{
-                  background: "rgba(255,255,255,0.95)",
-                  color: "var(--color-ink)",
-                }}
-              >
-                <div className="grid grid-cols-2 gap-6 text-center">
-                  <TrustStat num="147" label="ZIP codes" />
-                  <TrustStat num="6" label="Service types" />
-                  <TrustStat num="$99" label="Starting at" />
-                  <TrustStat num="100%" label="Vetted pros" />
-                </div>
-                <div
-                  className="mt-6 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
-                  style={{
-                    background: "var(--color-surface)",
-                    color: "var(--color-accent-deep)",
-                  }}
-                >
-                  <ShieldIcon />
-                  All pros are background-checked &amp; insured
+            {/* Hero illustration */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: "100%", maxWidth: 480, aspectRatio: "1", borderRadius: 32, background: "linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-mid) 100%)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
+                <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", background: "rgba(29,127,232,0.08)", top: -40, right: -40 }} />
+                <div style={{ position: "absolute", width: 140, height: 140, borderRadius: "50%", background: "rgba(29,127,232,0.06)", bottom: -20, left: -20 }} />
+                <div style={{ textAlign: "center", padding: 24, position: "relative", zIndex: 1 }}>
+                  <div style={{ fontSize: 80, lineHeight: 1, marginBottom: 16, filter: "drop-shadow(0 4px 12px rgba(29,127,232,0.3))" }}>🫧</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--color-accent-deep)", marginBottom: 6 }}>Professional Cleaning</div>
+                  <div style={{ fontSize: 13, color: "var(--color-muted)" }}>Atlanta & Metro Area</div>
                 </div>
               </div>
+              <FloatBadge style={{ bottom: 24, left: -20 }}>✅ Booking confirmed!</FloatBadge>
+              <FloatBadge style={{ top: 32, right: -16, animationDelay: "1s" }}>⭐ 5-star rated</FloatBadge>
             </div>
           </div>
         </section>
 
-        {/* ======= TRUST BAR (mobile only — desktop has the card) ======= */}
-        <section
-          className="border-y py-6 md:hidden"
-          style={{
-            background: "var(--color-surface)",
-            borderColor: "var(--color-rule)",
-          }}
-        >
-          <div className="mx-auto grid max-w-6xl grid-cols-4 gap-2 px-4 text-center">
-            <TrustStat num="147" label="ZIPs" />
-            <TrustStat num="6" label="Services" />
-            <TrustStat num="$99" label="From" />
-            <TrustStat num="100%" label="Vetted" />
+        {/* ── TRUST STRIP ── */}
+        <div style={{ background: "var(--color-surface)", borderTop: "1px solid var(--color-rule)", borderBottom: "1px solid var(--color-rule)", padding: "18px 24px" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 32, flexWrap: "wrap" }}>
+            {["✅ Background-checked cleaners","💯 Satisfaction guarantee","⚡ Same-day booking","🌿 Eco-friendly products","⭐ 4.9-star rated"].map(t => (
+              <span key={t} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)", whiteSpace: "nowrap" }}>{t}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* ── WHAT'S INCLUDED ── */}
+        <section style={{ padding: "80px 24px", background: "var(--color-white)" }} id="included">
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={S.eyebrow}>What's Included</div>
+              <h2 style={S.sectionTitle}>Every cleaning includes all of this</h2>
+              <p style={S.sectionSub}>Our standard cleaning covers every room — no hidden extras, no cutting corners.</p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 24 }} className="included-grid">
+              {INCLUDED_ROOMS.map((room, i) => (
+                <div key={room.title} style={{ background: room.extra ? "var(--color-surface)" : "white", border: `1.5px solid ${room.extra ? "var(--color-surface-mid)" : "var(--color-rule)"}`, borderRadius: 16, padding: "24px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ fontSize: 28 }}>{room.icon}</div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--color-ink)" }}>{room.title}</h3>
+                  <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+                    {room.items.map(item => (
+                      <li key={item} style={{ fontSize: 13, color: "var(--color-ink-mid)", display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
+                        <span style={{ color: room.extra ? "var(--color-accent-mid)" : "var(--color-accent)", fontWeight: 700, flexShrink: 0 }}>{room.extra ? "+" : "✓"}</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  {room.extra && <Link href="/book" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, fontWeight: 700, color: "var(--color-accent)", textDecoration: "none", marginTop: 4 }}>See all add-ons →</Link>}
+                </div>
+              ))}
+            </div>
+            <div style={{ textAlign: "center", background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)", borderRadius: 10, padding: "14px 20px", fontSize: 14, fontWeight: 600, color: "var(--color-accent-mid)" }}>
+              ✅ All supplies & equipment included — or save $10 by providing your own!
+            </div>
           </div>
         </section>
 
-        {/* ======= SERVICES ======= */}
-        <section id="services" className="px-4 py-20 md:px-8">
-          <div className="mx-auto max-w-6xl">
-            <div className="mb-12 text-center">
-              <span
-                className="inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest"
-                style={{
-                  background: "var(--color-surface)",
-                  color: "var(--color-accent-deep)",
-                }}
-              >
-                Our services
-              </span>
-              <h2 className="mt-4 text-3xl font-extrabold md:text-5xl">
-                Honest pricing for every clean.
-              </h2>
-              <p className="mt-3 text-base" style={{ color: "var(--color-muted)" }}>
-                No surprise fees. No bait-and-switch quotes. What you see is
-                what you pay.
-              </p>
+        {/* ── HOW IT WORKS ── */}
+        <section style={{ padding: "80px 24px", background: "var(--color-paper)" }} id="how">
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={S.eyebrow}>Simple & Fast</div>
+              <h2 style={S.sectionTitle}>How BubbleBox works</h2>
+              <p style={S.sectionSub}>Book your cleaning in under a minute. We handle the rest.</p>
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, position: "relative" }} className="steps-grid">
+              {[["1","Book Online","Choose your service, pick a date & time, and enter your address. Takes less than 60 seconds."],
+                ["2","We Show Up","Your background-checked, professional cleaner arrives on time with all supplies included."],
+                ["3","Enjoy a Clean Home","Relax while we do the work. Not happy? We come back for free — no questions asked."]
+              ].map(([n,title,desc]) => (
+                <div key={n} style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 16, position: "relative", zIndex: 1 }}>
+                  <div style={{ width: 72, height: 72, background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 800, color: "white", boxShadow: "0 6px 20px rgba(29,127,232,0.35)", flexShrink: 0 }}>{n}</div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--color-ink)" }}>{title}</h3>
+                  <p style={{ fontSize: 14, color: "var(--color-ink-mid)", lineHeight: 1.6 }}>{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {SERVICES.map((s) => (
-                <Link
-                  href={`/book?service=${s.id}`}
-                  key={s.id}
-                  className="group relative overflow-hidden rounded-2xl no-underline shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
-                  style={{
-                    background: "white",
-                    border: "1px solid var(--color-rule)",
-                  }}
+        {/* ── SERVICES ── */}
+        <section style={{ padding: "80px 24px", background: "var(--color-white)" }} id="services">
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={S.eyebrow}>Our Services</div>
+              <h2 style={S.sectionTitle}>Every type of clean, covered</h2>
+              <p style={S.sectionSub}>Residential, short-term rental, and commercial cleaning across Metro Atlanta.</p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }} className="services-grid">
+              {SERVICES.map(s => (
+                <Link key={s.id} href={`/book?service=${s.id}`} style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: "28px 24px", display: "flex", flexDirection: "column", gap: 10, textDecoration: "none", color: "inherit", position: "relative", overflow: "hidden", transition: "all 0.2s" }}
+                  onMouseEnter={e => { const el = e.currentTarget; el.style.boxShadow = "var(--shadow-card)"; el.style.transform = "translateY(-3px)"; el.style.borderColor = "var(--color-surface-mid)"; }}
+                  onMouseLeave={e => { const el = e.currentTarget; el.style.boxShadow = "none"; el.style.transform = "none"; el.style.borderColor = "var(--color-rule)"; }}
                 >
-                  {/* Photo */}
-                  <div className="relative h-48 overflow-hidden">
-                    <img
-                      src={s.imageUrl}
-                      alt={s.imageAlt}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                      loading="lazy"
-                    />
-                    {s.popular && (
-                      <span
-                        className="absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide text-white"
-                        style={{ background: "var(--color-accent)" }}
-                      >
-                        Most popular
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="p-5">
-                    <h3
-                      className="text-lg font-bold"
-                      style={{ color: "var(--color-ink)" }}
-                    >
-                      {s.name}
-                    </h3>
-                    <p
-                      className="mt-1 text-sm"
-                      style={{ color: "var(--color-muted)" }}
-                    >
-                      {s.longDescription}
-                    </p>
-                    <div
-                      className="mt-4 flex items-center justify-between border-t pt-3"
-                      style={{ borderColor: "var(--color-rule)" }}
-                    >
-                      <span
-                        className="text-2xl font-extrabold"
-                        style={{ color: "var(--color-accent-deep)" }}
-                      >
-                        {formatPrice(s.basePriceCents)}
-                      </span>
-                      <span
-                        className="flex items-center gap-1 text-sm font-medium"
-                        style={{ color: "var(--color-accent)" }}
-                      >
-                        Book →
-                      </span>
-                    </div>
-                  </div>
+                  <div style={{ fontSize: 36 }}>{s.icon}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700 }}>{s.name}</div>
+                  <div style={{ fontSize: 13, color: "var(--color-ink-mid)", lineHeight: 1.5, flex: 1 }}>{s.longDescription}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "var(--color-accent)", letterSpacing: "-0.5px" }}>{formatPrice(s.basePriceCents)}<span style={{ fontSize: 13, fontWeight: 500, color: "var(--color-muted)" }}> / visit</span></div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent)", display: "flex", alignItems: "center", gap: 6 }}>Book now →</div>
                 </Link>
               ))}
             </div>
           </div>
         </section>
 
-        {/* ======= HOW IT WORKS ======= */}
-        <section
-          id="how"
-          className="px-4 py-20 md:px-8"
-          style={{ background: "var(--color-ink)", color: "white" }}
-        >
-          <div className="mx-auto max-w-6xl">
-            <div className="mb-16 text-center">
-              <span
-                className="inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest"
-                style={{
-                  background: "rgba(14, 165, 233, 0.15)",
-                  color: "var(--color-accent)",
-                }}
-              >
-                How it works
-              </span>
-              <h2 className="mt-4 text-3xl font-extrabold md:text-5xl">
-                Three steps to spotless.
-              </h2>
+        {/* ── PRICING (dark) ── */}
+        <section style={{ padding: "80px 24px", background: "linear-gradient(135deg, var(--color-accent-deep) 0%, var(--color-accent-mid) 100%)" }} id="pricing">
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={{ ...S.eyebrow, color: "var(--color-accent-light)" }}>Transparent Pricing</div>
+              <h2 style={{ ...S.sectionTitle, color: "white" }}>Honest prices, no surprises</h2>
+              <p style={{ ...S.sectionSub, color: "rgba(255,255,255,0.7)" }}>All prices are starting rates for a 1-bedroom home. Your quote updates live as you book.</p>
             </div>
-
-            <div className="grid gap-12 md:grid-cols-3 md:gap-8">
-              <StepCard
-                num="1"
-                title="Tell us about your home"
-                body="Pick your service, enter your ZIP code, and choose a date. Get a transparent price upfront — no quote calls, no waiting."
-                icon={<CalendarIcon />}
-              />
-              <StepCard
-                num="2"
-                title="We match a pro"
-                body="We text vetted cleaning pros in your area. The first to claim your job is yours. Usually matched in under 5 minutes."
-                icon={<MatchIcon />}
-              />
-              <StepCard
-                num="3"
-                title="Sit back, get clean"
-                body="Your pro arrives at the scheduled time. Pay through BubbleBox after the job. Leave a review to help your community."
-                icon={<SparkleIcon />}
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }} className="pricing-grid">
+              {PRICING_CARDS.map(p => (
+                <div key={p.name} style={{ background: p.featured ? "white" : "rgba(255,255,255,0.10)", border: `1px solid ${p.featured ? "white" : "rgba(255,255,255,0.20)"}`, borderRadius: 16, padding: "28px 24px", textAlign: "center", transition: "all 0.2s", position: "relative" }}>
+                  {p.featured && <div style={{ display: "inline-block", background: "#FFD700", color: "#7A5700", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, marginBottom: 12 }}>Most Popular</div>}
+                  <div style={{ fontSize: 16, fontWeight: 700, color: p.featured ? "var(--color-accent-deep)" : "rgba(255,255,255,0.9)", marginBottom: 8 }}>{p.name}</div>
+                  <div style={{ fontSize: 44, fontWeight: 800, color: p.featured ? "var(--color-accent)" : "white", letterSpacing: "-1px", lineHeight: 1 }}>{p.price}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, opacity: 0.7, color: p.featured ? "var(--color-ink-mid)" : "white", marginBottom: 0 }}>starting price</div>
+                  <p style={{ fontSize: 13, color: p.featured ? "var(--color-ink-mid)" : "rgba(255,255,255,0.65)", margin: "10px 0 20px", lineHeight: 1.5 }}>{p.desc}</p>
+                  <Link href="/book" style={{ display: "block", background: p.featured ? "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)" : "rgba(255,255,255,0.15)", color: p.featured ? "white" : "white", border: p.featured ? "none" : "1px solid rgba(255,255,255,0.3)", borderRadius: 50, padding: 12, fontSize: 14, fontWeight: 700, textDecoration: "none", transition: "all 0.15s" }}>Book {p.name.split(" ")[0]} →</Link>
+                </div>
+              ))}
             </div>
-          </div>
-        </section>
-
-        {/* ======= REVIEWS ======= */}
-        <section id="reviews" className="px-4 py-20 md:px-8">
-          <div className="mx-auto max-w-6xl">
-            <div className="mb-12 text-center">
-              <span
-                className="inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest"
-                style={{
-                  background: "var(--color-surface)",
-                  color: "var(--color-accent-deep)",
-                }}
-              >
-                Reviews
-              </span>
-              <h2 className="mt-4 text-3xl font-extrabold md:text-5xl">
-                What Atlanta is saying.
-              </h2>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-3">
-              <ReviewCard
-                name="Jessica M."
-                neighborhood="Midtown · 30309"
-                stars={5}
-                quote="Booked a deep clean at 9 AM, had a pro at my door by 11. My kitchen has never looked this good. Already scheduled the next one."
-              />
-              <ReviewCard
-                name="David P."
-                neighborhood="Buckhead · 30305"
-                stars={5}
-                quote="I run three Airbnb units. BubbleBox turnovers are faster than my old service and the pricing is completely transparent."
-              />
-              <ReviewCard
-                name="Tanya R."
-                neighborhood="Decatur · 30030"
-                stars={4}
-                quote="Moved into a new apartment and needed a move-in clean ASAP. BubbleBox had someone there the next morning. Very thorough."
-              />
-            </div>
-            <p className="mt-6 text-center text-xs" style={{ color: "var(--color-muted)" }}>
-              Launch reviews from early customers. May 2026.
+            <p style={{ textAlign: "center", marginTop: 28, fontSize: 14, color: "rgba(255,255,255,0.5)" }}>
+              💡 Prices increase slightly with additional bedrooms, bathrooms, and add-ons. Your live quote updates as you book.
             </p>
           </div>
         </section>
 
-        {/* ======= TRUST BADGES ======= */}
-        <section
-          className="px-4 py-12 md:px-8"
-          style={{ background: "var(--color-surface)" }}
-        >
-          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-8 text-center">
-            <TrustBadge icon={<ShieldIcon />} label="Background checked" />
-            <TrustBadge icon={<LockIcon />} label="SSL secured" />
-            <TrustBadge icon={<CreditCardIcon />} label="Stripe payments" />
-            <TrustBadge icon={<CheckCircleIcon />} label="Insured pros" />
+        {/* ── REVIEWS ── */}
+        <section style={{ padding: "80px 24px", background: "var(--color-white)" }} id="reviews">
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={S.eyebrow}>Customer Reviews</div>
+              <h2 style={S.sectionTitle}>Atlanta loves BubbleBox</h2>
+              <p style={S.sectionSub}>Over 1,200 five-star cleanings across Metro Atlanta.</p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }} className="reviews-grid">
+              {REVIEWS.map(r => (
+                <div key={r.name} style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 12, boxShadow: "var(--shadow-soft)" }}>
+                  <div style={{ color: "#F59E0B", fontSize: 16, letterSpacing: 1 }}>{"★★★★★".slice(0, r.stars)}</div>
+                  <p style={{ fontSize: 14, color: "var(--color-ink-mid)", lineHeight: 1.65, fontStyle: "italic", flex: 1 }}>"{r.text}"</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "white", flexShrink: 0 }}>{r.initials}</div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>{r.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>{r.location}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* ======= FINAL CTA ======= */}
-        <section className="px-4 py-24 text-center md:px-8">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="text-3xl font-extrabold md:text-5xl">
-              Ready for a cleaner home?
-            </h2>
-            <p className="mt-4 text-lg" style={{ color: "var(--color-muted)" }}>
-              Book in under two minutes. No login required.
-            </p>
-            <Link
-              href="/book"
-              className="mt-8 inline-block rounded-full px-8 py-4 text-lg font-bold text-white no-underline shadow-lg transition-transform hover:-translate-y-0.5"
-              style={{ background: "var(--color-accent)" }}
-            >
-              Book a cleaning
-            </Link>
+        {/* ── SERVICE AREA ── */}
+        <section style={{ padding: "80px 24px", background: "var(--color-paper)" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={S.eyebrow}>Service Area</div>
+              <h2 style={S.sectionTitle}>We cover Atlanta & Metro</h2>
+              <p style={S.sectionSub}>Serving the entire Atlanta metro area. Don't see your city? Call us.</p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }} className="area-grid">
+              <div style={{ background: "var(--color-surface)", border: "1.5px solid var(--color-rule)", borderRadius: 16, aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 72, position: "relative", boxShadow: "var(--shadow-card)" }}>
+                🗺️
+                <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)" }}>Atlanta & Metro Atlanta, GA</div>
+              </div>
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 20, color: "var(--color-ink)" }}>Cities we serve:</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {CITIES.map(c => (
+                    <div key={c} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500, color: "var(--color-ink-mid)", padding: "10px 14px", background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 10 }}>
+                      <div style={{ width: 8, height: 8, background: "var(--color-accent)", borderRadius: "50%", flexShrink: 0 }} />{c}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 20, padding: "14px 16px", background: "var(--color-surface)", borderRadius: 10, fontSize: 14, color: "var(--color-accent-mid)", fontWeight: 500 }}>
+                  📍 Not sure if we cover your area? <a href="tel:+16788204881" style={{ color: "var(--color-accent)", fontWeight: 700, textDecoration: "none" }}>Call or text us</a>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
+
+        {/* ── FAQ ── */}
+        <section style={{ padding: "80px 24px", background: "var(--color-white)" }} id="faq">
+          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <div style={S.eyebrow}>FAQ</div>
+              <h2 style={S.sectionTitle}>Questions? We've got answers.</h2>
+              <p style={S.sectionSub}>Everything you need to know about booking with BubbleBox ATL.</p>
+            </div>
+            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
+              {FAQS.map((faq, i) => (
+                <div key={i} style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 10, overflow: "hidden" }}>
+                  <button onClick={() => setFaqOpen(faqOpen === i ? null : i)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", cursor: "pointer", fontSize: 15, fontWeight: 600, gap: 12, width: "100%", background: faqOpen === i ? "var(--color-surface)" : "transparent", textAlign: "left", color: "var(--color-ink)", border: "none", transition: "background 0.15s" }}>
+                    {faq.q}
+                    <span style={{ fontSize: 18, color: "var(--color-accent)", transition: "transform 0.25s", transform: faqOpen === i ? "rotate(180deg)" : "rotate(0deg)", flexShrink: 0 }}>⌄</span>
+                  </button>
+                  {faqOpen === i && (
+                    <div style={{ padding: "0 20px 18px", fontSize: 14, color: "var(--color-ink-mid)", lineHeight: 1.65 }}>{faq.a}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── CTA BAND ── */}
+        <div style={{ background: "linear-gradient(135deg, var(--color-accent-deep) 0%, var(--color-accent) 100%)", padding: "80px 24px", textAlign: "center" }}>
+          <div style={{ maxWidth: 600, margin: "0 auto" }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(28px, 4vw, 44px)", color: "white", marginBottom: 12, letterSpacing: "-0.5px" }}>Ready for a cleaner home?</h2>
+            <p style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", marginBottom: 32, lineHeight: 1.6 }}>Book in 60 seconds. Professional cleaners serving Atlanta & Metro Atlanta. First booking gets $20 off.</p>
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+              <Link href="/book" style={{ background: "white", color: "var(--color-accent-deep)", border: "none", borderRadius: 50, padding: "16px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", transition: "all 0.2s" }}>Book Now — From $99 →</Link>
+              <a href="tel:+16788204881" style={{ background: "transparent", color: "white", border: "2px solid rgba(255,255,255,0.5)", borderRadius: 50, padding: "16px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", transition: "all 0.2s" }}>📞 Call Us</a>
+            </div>
+          </div>
+        </div>
       </main>
 
       <Footer />
+
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+        @keyframes floatUp { 0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)} }
+        @media(max-width:768px){
+          .hero-grid{grid-template-columns:1fr!important;gap:32px!important;padding:40px 20px 32px!important;min-height:auto!important}
+          .included-grid{grid-template-columns:repeat(2,1fr)!important}
+          .steps-grid{grid-template-columns:1fr!important;gap:24px!important}
+          .services-grid{grid-template-columns:repeat(2,1fr)!important}
+          .pricing-grid{grid-template-columns:repeat(2,1fr)!important}
+          .reviews-grid{grid-template-columns:repeat(2,1fr)!important}
+          .area-grid{grid-template-columns:1fr!important;gap:24px!important}
+        }
+        @media(max-width:560px){
+          .included-grid{grid-template-columns:1fr!important}
+          .services-grid{grid-template-columns:1fr!important}
+          .pricing-grid{grid-template-columns:1fr!important}
+          .reviews-grid{grid-template-columns:1fr!important}
+        }
+      `}</style>
     </>
   );
 }
 
-/* ===== Sub-components ===== */
-
-function TrustStat({ num, label }: { num: string; label: string }) {
+function FloatBadge({ children, style }: { children: React.ReactNode; style: React.CSSProperties }) {
   return (
-    <div>
-      <span
-        className="block text-2xl font-extrabold"
-        style={{ color: "var(--color-accent-deep)" }}
-      >
-        {num}
-      </span>
-      <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-        {label}
-      </span>
+    <div style={{ position: "absolute", background: "white", borderRadius: 10, padding: "10px 14px", boxShadow: "0 4px 20px rgba(29,127,232,0.18)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "var(--color-ink)", whiteSpace: "nowrap", animation: "floatUp 3s ease-in-out infinite", ...style }}>
+      {children}
     </div>
   );
 }
 
-function StepCard({
-  num,
-  title,
-  body,
-  icon,
-}: {
-  num: string;
-  title: string;
-  body: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div
-      className="rounded-2xl p-8"
-      style={{ background: "rgba(255,255,255,0.06)" }}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold"
-          style={{
-            background: "var(--color-accent)",
-            color: "white",
-          }}
-        >
-          {num}
-        </span>
-        <div style={{ color: "var(--color-accent)" }}>{icon}</div>
-      </div>
-      <h3 className="mt-5 text-xl font-bold">{title}</h3>
-      <p
-        className="mt-2 text-sm leading-relaxed"
-        style={{ color: "rgba(255,255,255,0.7)" }}
-      >
-        {body}
-      </p>
-    </div>
-  );
-}
+const INCLUDED_ROOMS = [
+  { icon: "🍳", title: "Kitchen", items: ["Countertops wiped & disinfected","Stovetop & burners cleaned","Exterior of appliances cleaned","Microwave interior & exterior","Sink scrubbed & polished","Cabinet fronts wiped down","Trash emptied & relined","Floor swept & mopped"] },
+  { icon: "🚿", title: "Bathrooms", items: ["Toilet scrubbed inside & out","Shower & tub scrubbed","Tiles & grout cleaned","Sink & faucet polished","Mirror cleaned streak-free","Countertops disinfected","Trash emptied & relined","Floor swept & mopped"] },
+  { icon: "🛏️", title: "Bedrooms", items: ["Dust all surfaces & furniture","Mirrors cleaned","Vacuum floors & rugs","Mop hard floors","Closet exterior wiped","Nightstands & dressers dusted","Ceiling fans & light fixtures","Trash emptied & relined"] },
+  { icon: "🛋️", title: "Living Areas", items: ["All surfaces dusted","Baseboards wiped","Window sills dusted","Vacuum furniture & cushions","Vacuum & mop floors","Light switches & door handles","Ceiling fans dusted","Trash emptied & relined"] },
+  { icon: "🏠", title: "General / Whole Home", items: ["All rooms vacuumed","All hard floors mopped","All mirrors & glass cleaned","Cobwebs removed","Interior doors & frames wiped","Hallways & stairs cleaned","All trash cans emptied","Eco-friendly products available"] },
+  { icon: "➕", title: "Available Add-Ons", extra: true, items: ["Inside oven (+$45)","Inside refrigerator (+$35)","Interior windows (+$50)","Laundry wash & dry (+$30)","Inside cabinets (+$40)","Garage sweep (+$60)","Patio / balcony (+$55)","Wall spot cleaning (+$70)"] },
+];
 
-function ReviewCard({
-  name,
-  neighborhood,
-  stars,
-  quote,
-}: {
-  name: string;
-  neighborhood: string;
-  stars: number;
-  quote: string;
-}) {
-  return (
-    <div
-      className="rounded-2xl p-6"
-      style={{
-        background: "white",
-        border: "1px solid var(--color-rule)",
-      }}
-    >
-      <div className="flex items-center gap-1 text-base" style={{ color: "#facc15" }}>
-        {Array.from({ length: stars }).map((_, i) => (
-          <span key={i}>★</span>
-        ))}
-        {Array.from({ length: 5 - stars }).map((_, i) => (
-          <span key={i} style={{ color: "var(--color-rule)" }}>
-            ★
-          </span>
-        ))}
-      </div>
-      <p
-        className="mt-3 text-sm leading-relaxed"
-        style={{ color: "var(--color-ink)" }}
-      >
-        &ldquo;{quote}&rdquo;
-      </p>
-      <div className="mt-4">
-        <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
-          {name}
-        </div>
-        <div className="text-xs" style={{ color: "var(--color-muted)" }}>
-          {neighborhood}
-        </div>
-      </div>
-    </div>
-  );
-}
+const PRICING_CARDS = [
+  { name: "Standard Cleaning", price: "$99", desc: "Perfect for weekly or bi-weekly upkeep. Save up to 20% with a recurring plan." },
+  { name: "Deep Cleaning", price: "$169", desc: "First-time customers love this. A thorough reset for your home from top to bottom.", featured: true },
+  { name: "Airbnb Turnover", price: "$109", desc: "Fast turnaround between guests. Keep your 5-star rating with every stay." },
+  { name: "Move In / Move Out", price: "$219", desc: "Get your security deposit back or start fresh in a spotless new home." },
+  { name: "Post-Construction", price: "$279", desc: "Heavy-duty clean after construction, remodels, or renovation work." },
+  { name: "Office / Commercial", price: "$129", desc: "Professional workspace cleaning — flexible scheduling around your business hours." },
+];
 
-function TrustBadge({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span style={{ color: "var(--color-accent-deep)" }}>{icon}</span>
-      <span
-        className="text-sm font-medium"
-        style={{ color: "var(--color-ink)" }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+const REVIEWS = [
+  { name: "Jessica M.", location: "Midtown, Atlanta", initials: "JM", stars: 5, text: "Absolutely incredible. My apartment has never looked this clean. The team was on time, professional, and thorough. Will definitely be booking again!" },
+  { name: "David K.", location: "Buckhead, Atlanta", initials: "DK", stars: 5, text: "Used them for my Airbnb and my guests always comment on how clean it is. BubbleBox is the only cleaning service I trust. Booking is so easy too." },
+  { name: "Tanya P.", location: "Decatur, GA", initials: "TP", stars: 5, text: "Move-out clean was amazing. The place looked brand new when they were done. BubbleBox is so much more affordable than other companies I called." },
+  { name: "Robert H.", location: "Sandy Springs, GA", initials: "RH", stars: 5, text: "I've tried 3 other cleaning services in Atlanta and BubbleBox is by far the best value. Deep clean was worth every penny — my house sparkles!" },
+  { name: "Alexis L.", location: "Alpharetta, GA", initials: "AL", stars: 5, text: "Booked same-day online and they were there within hours. The kitchen and bathrooms were spotless. Extremely professional and friendly staff." },
+  { name: "Carlos M.", location: "Marietta, GA", initials: "CM", stars: 5, text: "We use BubbleBox for our office every week. The team is reliable, thorough, and always leaves our workspace looking brand new. 10/10!" },
+];
 
-/* ===== SVG Icons ===== */
+const CITIES = ["Atlanta","Buckhead","Midtown","Decatur","Sandy Springs","Alpharetta","Marietta","Smyrna","Roswell","Dunwoody","Brookhaven","East Atlanta","College Park","Norcross","Kennesaw","Peachtree City"];
 
-function ShieldIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
-function CreditCardIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-      <line x1="1" y1="10" x2="23" y2="10" />
-    </svg>
-  );
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function MatchIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function SparkleIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
+const FAQS = [
+  { q: "Do I need to be home during the cleaning?", a: "No! Many of our customers prefer to be out during their cleaning. You can provide entry instructions (key code, lockbox, etc.) in your booking notes and we'll handle the rest." },
+  { q: "Are your cleaners background-checked?", a: "Absolutely. Every BubbleBox cleaner passes a thorough background check before joining our team." },
+  { q: "What if I'm not happy with my cleaning?", a: "We offer a 100% satisfaction guarantee. If you're not happy, let us know within 24 hours and we'll send a team back to re-clean the affected areas at no additional cost." },
+  { q: "Do you bring your own supplies and equipment?", a: "Yes! Our cleaners arrive fully equipped with professional-grade supplies. Prefer to use your own? Save $10 by selecting \"I'll Provide My Own Supplies\" during booking." },
+  { q: "Can I book same-day?", a: "Yes, same-day booking is available based on cleaner availability. Book before noon and we'll do our best to have someone there the same day." },
+  { q: "How do recurring plans work?", a: "With a recurring plan (weekly, bi-weekly, or monthly), we lock in a discounted rate for every visit — up to 20% off. You can pause or cancel at any time with no penalty." },
+  { q: "When am I charged?", a: "A pre-authorization hold is placed on your card at the time of booking to verify funds are available. This is not a charge. Your card is fully charged only after your cleaning is complete." },
+  { q: "How do I use my $20 first-booking discount?", a: "Use promo code BUBBLE20 at checkout during your first booking. The $20 discount will be applied automatically. One use per customer." },
+];
