@@ -1,768 +1,455 @@
 "use client";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "@/components/Chrome";
-import { isInServiceArea } from "@/lib/service-area";
-import { toE164USPhone, formatPhoneForDisplay } from "@/lib/api";
+import { toE164USPhone } from "@/lib/api";
 
-const SERVICES_OFFERED = [
-  { id: "standard-cleaning", label: "Standard Cleaning" },
-  { id: "deep-cleaning", label: "Deep Cleaning" },
-  { id: "airbnb-turnover", label: "Airbnb Turnover" },
-  { id: "move-in-out", label: "Move In / Out" },
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
+
+const SERVICE_OPTIONS = [
+  { id: "standard-cleaning", label: "🧹 Standard Cleaning" },
+  { id: "deep-cleaning", label: "✨ Deep Cleaning" },
+  { id: "airbnb-turnover", label: "🏠 Airbnb Turnover" },
+  { id: "move-in-out", label: "📦 Move In/Out" },
+  { id: "post-construction", label: "🏗️ Post-Construction" },
+  { id: "office-cleaning", label: "🏢 Office/Commercial" },
 ];
 
-const STEPS = ["About you", "Your service", "Agreements", "Submit"] as const;
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOURS = [
+  { id: "morning", label: "☀️ Morning (8am–12pm)" },
+  { id: "afternoon", label: "🌤️ Afternoon (12pm–5pm)" },
+  { id: "evening", label: "🌙 Evening (5pm–8pm)" },
+  { id: "flexible", label: "🔄 Flexible / Any time" },
+];
+const EXPERIENCE_OPTS = [
+  { value: "", label: "Select experience level" },
+  { value: "none", label: "No experience — willing to learn" },
+  { value: "<1", label: "Less than 1 year" },
+  { value: "1-2", label: "1–2 years" },
+  { value: "3-5", label: "3–5 years" },
+  { value: "5+", label: "5+ years" },
+];
+const PERKS = [
+  { icon: "💵", title: "Daily Pay", desc: "Get paid the same day you work — just like Uber. Direct deposit, no waiting, no delays." },
+  { icon: "🗓️", title: "Flexible Schedule", desc: "You choose when you work. Set your own availability and take the days off you need." },
+  { icon: "📍", title: "Work Close to Home", desc: "We match you with jobs in your neighborhood to minimize commute time and maximize earnings." },
+  { icon: "💰", title: "Keep Your Tips", desc: "100% of customer tips go directly to you. Great service means great extra income." },
+  { icon: "🎓", title: "Training Provided", desc: "No experience? No problem. We train you on our professional cleaning standards at no cost." },
+  { icon: "📱", title: "Easy App", desc: "Manage jobs, track earnings, and chat with customers all in one simple app." },
+];
+const STEPS = [
+  { num: "1", title: "Apply Online", desc: "Fill out the short application below. Takes about 5 minutes." },
+  { num: "2", title: "Background Check", desc: "We run a quick background check to keep our customers safe." },
+  { num: "3", title: "Quick Interview", desc: "A short phone or video call with our team to get to know you." },
+  { num: "4", title: "Start Earning", desc: "Get approved and start receiving jobs in your area right away." },
+];
 
-interface FormState {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  zipsRaw: string;
-  services: string[];
-  hasInsurance: boolean;
-  hasTransportation: boolean;
-  yearsExperience: string;
-  agreeContractor: boolean;
-  agreeAntiCircumvent: boolean;
-  agreePlatformTerms: boolean;
-  agreeBackgroundCheck: boolean;
-  agreeBackgroundDocsLater: boolean;
-  agreeStripeOnboardLater: boolean;
-}
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
+const styles = {
+  eyebrow: { fontSize: 12, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" as const, color: "var(--color-accent)", marginBottom: 10 },
+  sectionTitle: { fontFamily: "var(--font-display)", fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.15, letterSpacing: "-0.5px", color: "var(--color-ink)", marginBottom: 12 },
+  sectionSub: { fontSize: 16, color: "var(--color-ink-mid)", maxWidth: 540, margin: "0 auto", lineHeight: 1.6 },
+  fieldLabel: { fontSize: 13, fontWeight: 600, color: "var(--color-ink)", marginBottom: 6, display: "block" },
+  input: { width: "100%", padding: "12px 14px", border: "2px solid var(--color-rule)", borderRadius: 10, fontSize: 15, color: "var(--color-ink)", background: "white", outline: "none", fontFamily: "inherit", transition: "border-color 0.15s" },
+  formSectionTitle: { fontSize: 16, fontWeight: 700, color: "var(--color-accent-deep)", marginBottom: 4, paddingBottom: 10, borderBottom: "2px solid var(--color-surface)" },
+};
 
 export default function JoinPage() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>({
-    firstName: "",
-    lastName: "",
-    phone: "",
-    email: "",
-    zipsRaw: "",
-    services: [],
-    hasInsurance: false,
-    hasTransportation: false,
-    yearsExperience: "",
-    agreeContractor: false,
-    agreeAntiCircumvent: false,
-    agreePlatformTerms: false,
-    agreeBackgroundCheck: false,
-    agreeBackgroundDocsLater: false,
-    agreeStripeOnboardLater: false,
-  });
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const stepValid = validateStep(step, form);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [zip, setZip] = useState("");
+  const [experience, setExperience] = useState("");
+  const [bio, setBio] = useState("");
+  const [services, setServices] = useState<Set<string>>(new Set());
+  const [days, setDays] = useState<Set<string>>(new Set());
+  const [hours, setHours] = useState<Set<string>>(new Set());
+  const [transport, setTransport] = useState<"yes" | "no" | "">("");
+  const [supplies, setSupplies] = useState<"yes" | "no" | "">("");
+  const [bgConsent, setBgConsent] = useState(false);
+  const [termsConsent, setTermsConsent] = useState(false);
 
-  function next() {
-    if (step < STEPS.length - 1) setStep(step + 1);
-  }
-
-  function back() {
-    if (step > 0) setStep(step - 1);
-    setServerError(null);
-  }
-
-  function update(patch: Partial<FormState>) {
-    setForm((f) => ({ ...f, ...patch }));
-  }
-
-  function toggleService(id: string) {
-    setForm((f) => ({
-      ...f,
-      services: f.services.includes(id)
-        ? f.services.filter((s) => s !== id)
-        : [...f.services, id],
-    }));
+  function toggleSet(set: Set<string>, key: string, setter: (s: Set<string>) => void) {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setter(next);
   }
 
   async function submit() {
+    setError(null);
+
+    // Validation
+    if (!firstName.trim() || !lastName.trim()) return setError("Please enter your full name.");
+    if (!email.includes("@")) return setError("Please enter a valid email.");
+    const phoneE164 = toE164USPhone(phone);
+    if (!phoneE164) return setError("Please enter a valid US phone number.");
+    if (zip.length !== 5) return setError("Please enter your 5-digit ZIP code.");
+    if (services.size === 0) return setError("Please select at least one service type.");
+    if (days.size === 0) return setError("Please select at least one available day.");
+    if (!transport) return setError("Please tell us about your transportation.");
+    if (!bgConsent || !termsConsent) return setError("Please check both consent boxes to continue.");
+
     setSubmitting(true);
-    setServerError(null);
 
-    const phoneE164 = toE164USPhone(form.phone);
-    if (!phoneE164) {
-      setServerError("Please enter a valid US phone number.");
-      setSubmitting(false);
-      return;
-    }
-
-    const zips = form.zipsRaw
-      .split(/[,\s]+/)
-      .map((z) => z.trim())
-      .filter((z) => z.length === 5)
-      .filter((z, i, arr) => arr.indexOf(z) === i);
+    const payload = {
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      phone: phoneE164,
+      email: email.trim(),
+      service_zips: [zip],
+      services: [...services],
+      has_insurance: false,
+      has_transportation: transport === "yes",
+      years_experience: experience || "none",
+      agreed_at: new Date().toISOString(),
+      agreements: {
+        independent_contractor: termsConsent,
+        anti_circumvention: termsConsent,
+        platform_terms: termsConsent,
+        background_check_consent: bgConsent,
+        will_provide_documents: termsConsent,
+        will_complete_stripe_onboarding: termsConsent,
+      },
+      // Extra context for review (stored in notes / not validated server-side)
+      bio: bio.trim() || undefined,
+      preferred_hours: [...hours],
+      preferred_days: [...days],
+      has_supplies: supplies === "yes",
+    };
 
     try {
       const res = await fetch(`${API_BASE}/api/pros/applications/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          first_name: form.firstName.trim(),
-          last_name: form.lastName.trim(),
-          phone: phoneE164,
-          email: form.email.trim(),
-          service_zips: zips,
-          services: form.services,
-          has_insurance: form.hasInsurance,
-          has_transportation: form.hasTransportation,
-          years_experience: form.yearsExperience,
-          agreed_at: new Date().toISOString(),
-          agreements: {
-            independent_contractor: form.agreeContractor,
-            anti_circumvention: form.agreeAntiCircumvent,
-            platform_terms: form.agreePlatformTerms,
-            background_check_consent: form.agreeBackgroundCheck,
-            will_provide_documents: form.agreeBackgroundDocsLater,
-            will_complete_stripe_onboarding: form.agreeStripeOnboardLater,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
-
+      const body = await res.json();
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg =
-          body?.error?.message ??
-          "We couldn't submit your application. Try again in a moment.";
-        setServerError(msg);
+        const msg = body.error?.message || "Something went wrong. Please try again.";
+        const details = body.error?.details?.map((d: any) => d.message).join(", ");
+        setError(details ? `${msg} (${details})` : msg);
         setSubmitting(false);
         return;
       }
-
-      router.push("/join/thanks");
-    } catch {
-      setServerError(
-        "Couldn't reach the server. Check your connection and try again."
-      );
+      setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError("Couldn't reach the server. Please check your connection and try again.");
       setSubmitting(false);
     }
+  }
+
+  // ── Success screen ──
+  if (submitted) {
+    return (
+      <>
+        <Header />
+        <main style={{ minHeight: "70vh", padding: "60px 24px", background: "var(--color-paper)" }}>
+          <div style={{ maxWidth: 560, margin: "0 auto", background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: 40, textAlign: "center", boxShadow: "var(--shadow-card)" }}>
+            <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: 32, color: "var(--color-ink)", letterSpacing: "-0.5px", marginBottom: 12 }}>Application submitted!</h1>
+            <p style={{ fontSize: 15, color: "var(--color-ink-mid)", lineHeight: 1.6, marginBottom: 28 }}>
+              Thanks for applying to BubbleBox ATL! Our team will review your application and reach out within 2–3 business days.
+            </p>
+            <div style={{ textAlign: "left", display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+              {[
+                "We'll review your application",
+                "We'll send a background check consent link to your email",
+                "We'll schedule a quick phone interview",
+                "Get approved and start earning!",
+              ].map((step, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--color-surface)", border: "1px solid var(--color-surface-mid)", borderRadius: 10, padding: "12px 14px", fontSize: 14, color: "var(--color-ink)" }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--color-accent)", color: "white", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</div>
+                  {step}
+                </div>
+              ))}
+            </div>
+            <Link href="/" style={{ display: "inline-block", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", borderRadius: 50, padding: "14px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(29,127,232,0.35)" }}>
+              Back to Home
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
   }
 
   return (
     <>
       <Header />
 
-      <main className="mx-auto max-w-2xl px-4 py-8 md:px-8 md:py-16">
-        {/* Progress */}
-        <div className="mb-8">
-          <div className="mb-2 flex items-center justify-between">
-            <span
-              className="text-xs font-bold uppercase tracking-widest"
-              style={{ color: "var(--color-accent-deep)" }}
-            >
-              Step {step + 1} of {STEPS.length}
-            </span>
-            <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-              {STEPS[step]}
-            </span>
+      {/* HERO */}
+      <section style={{ padding: "60px 24px 48px", background: "linear-gradient(135deg, var(--color-accent-deep) 0%, var(--color-accent-mid) 50%, var(--color-accent) 100%)", color: "white", textAlign: "center", position: "relative", overflow: "hidden" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", position: "relative", zIndex: 1 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 99, padding: "6px 14px", fontSize: 13, fontWeight: 700, marginBottom: 20 }}>
+            <span style={{ width: 8, height: 8, background: "#22c55e", borderRadius: "50%", animation: "pulse 2s infinite" }} />
+            Now Hiring in Atlanta
           </div>
-          <div
-            className="h-1.5 overflow-hidden rounded-full"
-            style={{ background: "var(--color-surface)" }}
-          >
-            <div
-              className="h-full transition-all duration-300"
-              style={{
-                width: `${((step + 1) / STEPS.length) * 100}%`,
-                background: "var(--color-accent)",
-              }}
-            />
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(36px, 5vw, 58px)", lineHeight: 1.05, letterSpacing: "-1px", marginBottom: 16 }}>
+            Get paid to clean.<br /><em style={{ color: "#FFD700", fontStyle: "italic" }}>On your schedule.</em>
+          </h1>
+          <p style={{ fontSize: 17, opacity: 0.85, lineHeight: 1.6, maxWidth: 560, margin: "0 auto 24px" }}>
+            Join the BubbleBox ATL team and build a flexible cleaning career you love. Daily pay, great customers, and work close to home.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 28 }}>
+            {["💵 Daily pay", "🗓️ Flexible schedule", "📍 Work near home", "💰 Keep your tips", "🎓 Training provided", "🚀 No experience needed"].map(p => (
+              <span key={p} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 99, padding: "8px 14px", fontSize: 13, fontWeight: 600 }}>{p}</span>
+            ))}
           </div>
-        </div>
-
-        <h1 className="mb-3 text-3xl font-extrabold md:text-4xl">
-          {stepHeading(step)}
-        </h1>
-        <p className="mb-8 text-base" style={{ color: "var(--color-muted)" }}>
-          {stepSubhead(step)}
-        </p>
-
-        {/* Steps */}
-        <div className="space-y-6">
-          {step === 0 && <AboutStep form={form} onChange={update} />}
-          {step === 1 && (
-            <ServiceStep
-              form={form}
-              onChange={update}
-              toggleService={toggleService}
-            />
-          )}
-          {step === 2 && <AgreementsStep form={form} onChange={update} />}
-          {step === 3 && <ReviewStep form={form} />}
-        </div>
-
-        {serverError && (
-          <div
-            className="mt-6 rounded-xl p-4 text-sm font-medium"
-            style={{
-              background: "rgba(239, 68, 68, 0.08)",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
-              color: "var(--color-danger)",
-            }}
-            role="alert"
-          >
-            {serverError}
-          </div>
-        )}
-
-        {/* Nav */}
-        <div className="mt-10 flex items-center justify-between">
-          {step > 0 ? (
-            <button
-              type="button"
-              onClick={back}
-              disabled={submitting}
-              className="rounded-full px-5 py-2.5 font-semibold"
-              style={{
-                background: "transparent",
-                color: "var(--color-ink)",
-                border: "1px solid var(--color-rule)",
-              }}
-            >
-              ← Back
-            </button>
-          ) : (
-            <span />
-          )}
-
-          {step < STEPS.length - 1 ? (
-            <button
-              type="button"
-              onClick={next}
-              disabled={!stepValid}
-              className="rounded-full px-6 py-3 font-bold text-white transition-opacity disabled:opacity-40"
-              style={{ background: "var(--color-accent)" }}
-            >
-              Continue →
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!stepValid || submitting}
-              className="rounded-full px-6 py-3 font-bold text-white transition-opacity disabled:opacity-60"
-              style={{ background: "var(--color-accent)" }}
-            >
-              {submitting ? "Submitting..." : "Submit application"}
-            </button>
-          )}
-        </div>
-
-        <p
-          className="mt-6 text-center text-xs"
-          style={{ color: "var(--color-muted)" }}
-        >
-          We review every application within 24-48 hours. Questions?{" "}
-          <a href="mailto:bubbleboxusa@gmail.com" className="underline">
-            bubbleboxusa@gmail.com
+          <a href="#apply" style={{ display: "inline-block", background: "white", color: "var(--color-accent-deep)", borderRadius: 50, padding: "14px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.18)", transition: "all 0.2s" }}>
+            Apply in 5 Minutes ↓
           </a>
-        </p>
-      </main>
+        </div>
+      </section>
+
+      {/* PERKS */}
+      <section style={{ padding: "72px 24px", background: "white" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <div style={styles.eyebrow}>Why BubbleBox</div>
+            <h2 style={styles.sectionTitle}>A cleaning job that works for you</h2>
+            <p style={styles.sectionSub}>We built BubbleBox to be the best place to work as a cleaner in Atlanta.</p>
+          </div>
+          <div className="perks-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            {PERKS.map(p => (
+              <div key={p.title} style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: 24, boxShadow: "var(--shadow-soft)" }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>{p.icon}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--color-ink)", marginBottom: 8 }}>{p.title}</div>
+                <div style={{ fontSize: 14, color: "var(--color-ink-mid)", lineHeight: 1.6 }}>{p.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section style={{ padding: "72px 24px", background: "var(--color-paper)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <div style={styles.eyebrow}>Simple Process</div>
+            <h2 style={styles.sectionTitle}>How to get started</h2>
+            <p style={styles.sectionSub}>From application to your first job in as little as 3–5 business days.</p>
+          </div>
+          <div className="steps-grid-join" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
+            {STEPS.map(s => (
+              <div key={s.num} style={{ textAlign: "center", padding: 20 }}>
+                <div style={{ width: 64, height: 64, background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 22, fontWeight: 800, color: "white", boxShadow: "0 6px 20px rgba(29,127,232,0.35)" }}>{s.num}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--color-ink)", marginBottom: 6 }}>{s.title}</div>
+                <div style={{ fontSize: 14, color: "var(--color-ink-mid)", lineHeight: 1.5 }}>{s.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* APPLICATION */}
+      <section id="apply" style={{ padding: "72px 24px", background: "white" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <div style={styles.eyebrow}>Application</div>
+            <h2 style={styles.sectionTitle}>Apply to join the team</h2>
+            <p style={styles.sectionSub}>All applications are reviewed within 2–3 business days. We'll reach out by phone or email.</p>
+          </div>
+
+          <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 20, overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
+            <div style={{ background: "linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-mid) 100%)", padding: "20px 24px", borderBottom: "1.5px solid var(--color-rule)" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent-deep)" }}>Cleaner Application</div>
+              <div style={{ fontSize: 13, color: "var(--color-ink-mid)", marginTop: 4 }}>All fields marked with * are required. Takes about 5 minutes.</div>
+            </div>
+
+            <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 32 }}>
+              {/* Personal Info */}
+              <div>
+                <div style={styles.formSectionTitle}>Personal Information</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
+                  <div className="field-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Field label="First Name" required>
+                      <input type="text" placeholder="Jane" autoComplete="given-name" value={firstName} onChange={e => setFirstName(e.target.value)} style={styles.input} />
+                    </Field>
+                    <Field label="Last Name" required>
+                      <input type="text" placeholder="Smith" autoComplete="family-name" value={lastName} onChange={e => setLastName(e.target.value)} style={styles.input} />
+                    </Field>
+                  </div>
+                  <div className="field-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Field label="Email Address" required>
+                      <input type="email" placeholder="jane@email.com" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} style={styles.input} />
+                    </Field>
+                    <Field label="Phone Number" required>
+                      <input type="tel" placeholder="(404) 555-0123" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} style={styles.input} />
+                    </Field>
+                  </div>
+                  <Field label="Home ZIP Code" required hint="we match jobs near you">
+                    <input type="text" inputMode="numeric" maxLength={5} placeholder="30308" value={zip} onChange={e => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))} style={styles.input} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Experience */}
+              <div>
+                <div style={styles.formSectionTitle}>Experience</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
+                  <Field label="Years of cleaning experience" required>
+                    <select value={experience} onChange={e => setExperience(e.target.value)} style={styles.input}>
+                      {EXPERIENCE_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Tell us about yourself" hint="optional">
+                    <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Why do you want to join BubbleBox? Any relevant experience or skills?" rows={3} style={{ ...styles.input, resize: "vertical", minHeight: 90 }} />
+                  </Field>
+                  <Field label="Service types you're comfortable with">
+                    <CheckGrid items={SERVICE_OPTIONS} selected={services} onToggle={id => toggleSet(services, id, setServices)} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Availability */}
+              <div>
+                <div style={styles.formSectionTitle}>Availability</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
+                  <Field label="Days available" required>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+                      {DAYS.map(d => {
+                        const sel = days.has(d);
+                        return (
+                          <button key={d} type="button" onClick={() => toggleSet(days, d, setDays)} style={{ background: sel ? "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)" : "white", color: sel ? "white" : "var(--color-ink)", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: "10px 4px", fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
+                            {d.toUpperCase()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                  <Field label="Preferred hours">
+                    <CheckGrid items={HOURS} selected={hours} onToggle={id => toggleSet(hours, id, setHours)} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Logistics */}
+              <div>
+                <div style={styles.formSectionTitle}>Logistics</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
+                  <Field label="Reliable transportation?" required>
+                    <RadioGrid items={[{ id: "yes", label: "🚗 Yes, I have a car" }, { id: "no", label: "🚌 No, I use transit" }]} value={transport} onChange={v => setTransport(v as "yes" | "no")} />
+                  </Field>
+                  <Field label="Do you have your own cleaning supplies?">
+                    <RadioGrid items={[{ id: "yes", label: "✅ Yes, I have supplies" }, { id: "no", label: "❌ No, I'll need them" }]} value={supplies} onChange={v => setSupplies(v as "yes" | "no")} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Consent */}
+              <div>
+                <div style={styles.formSectionTitle}>Consent &amp; Agreement</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
+                  <ConsentBox checked={bgConsent} onClick={() => setBgConsent(!bgConsent)}>
+                    <strong>Background check consent</strong> — I authorize BubbleBox ATL to conduct a background check as part of the hiring process. I understand this is required for all applicants.
+                  </ConsentBox>
+                  <ConsentBox checked={termsConsent} onClick={() => setTermsConsent(!termsConsent)}>
+                    <strong>Terms agreement</strong> — I certify that the information provided is accurate and complete. I agree to BubbleBox ATL's <Link href="/terms" style={{ color: "var(--color-accent)" }}>Terms of Service</Link> and <Link href="/privacy" style={{ color: "var(--color-accent)" }}>Privacy Policy</Link>.
+                  </ConsentBox>
+                </div>
+              </div>
+
+              {error && (
+                <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 14, color: "var(--color-danger)", fontWeight: 500 }}>{error}</div>
+              )}
+
+              <div>
+                <button onClick={submit} disabled={submitting} style={{ width: "100%", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: "16px 24px", fontSize: 16, fontWeight: 700, cursor: submitting ? "wait" : "pointer", boxShadow: "0 6px 24px rgba(29,127,232,0.35)", opacity: submitting ? 0.7 : 1, fontFamily: "inherit" }}>
+                  {submitting ? "Submitting…" : "Submit Application →"}
+                </button>
+                <div style={{ marginTop: 12, fontSize: 12, color: "var(--color-muted)", textAlign: "center", lineHeight: 1.5 }}>
+                  Applications are reviewed within 2–3 business days. We'll contact you at the email and phone number provided. Questions? Call us at <a href="tel:+16788204881" style={{ color: "var(--color-accent)" }}>(678) 820-4881</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <Footer />
+
+      <style>{`
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        @media(max-width:768px){
+          .perks-grid{grid-template-columns:1fr 1fr!important}
+          .steps-grid-join{grid-template-columns:1fr 1fr!important}
+          .field-row{grid-template-columns:1fr!important}
+        }
+        @media(max-width:480px){
+          .perks-grid{grid-template-columns:1fr!important}
+          .steps-grid-join{grid-template-columns:1fr!important}
+        }
+      `}</style>
     </>
   );
 }
 
-/* =================== Steps =================== */
+// ── Reusable subcomponents ──
 
-function AboutStep({
-  form,
-  onChange,
-}: {
-  form: FormState;
-  onChange: (p: Partial<FormState>) => void;
-}) {
+function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="First name">
-          <input
-            type="text"
-            value={form.firstName}
-            onChange={(e) => onChange({ firstName: e.target.value })}
-            autoComplete="given-name"
-            className="form-input"
-          />
-        </Field>
-        <Field label="Last name">
-          <input
-            type="text"
-            value={form.lastName}
-            onChange={(e) => onChange({ lastName: e.target.value })}
-            autoComplete="family-name"
-            className="form-input"
-          />
-        </Field>
-      </div>
-
-      <Field
-        label="Mobile phone"
-        hint="We text you job offers. Reply YES to claim."
-      >
-        <input
-          type="tel"
-          value={form.phone}
-          onChange={(e) => onChange({ phone: e.target.value })}
-          placeholder="(404) 555-0100"
-          autoComplete="tel"
-          inputMode="tel"
-          className="form-input"
-        />
-      </Field>
-
-      <Field label="Email">
-        <input
-          type="email"
-          value={form.email}
-          onChange={(e) => onChange({ email: e.target.value })}
-          placeholder="you@example.com"
-          autoComplete="email"
-          inputMode="email"
-          className="form-input"
-        />
-      </Field>
-
-      <Field
-        label="Years of cleaning experience"
-        hint="Approximate is fine"
-      >
-        <select
-          value={form.yearsExperience}
-          onChange={(e) => onChange({ yearsExperience: e.target.value })}
-          className="form-input"
-        >
-          <option value="">Select...</option>
-          <option value="<1">Less than 1 year</option>
-          <option value="1-2">1–2 years</option>
-          <option value="3-5">3–5 years</option>
-          <option value="6-10">6–10 years</option>
-          <option value="10+">10+ years</option>
-        </select>
-      </Field>
-
-      <style>{formInputCSS}</style>
-    </div>
-  );
-}
-
-function ServiceStep({
-  form,
-  onChange,
-  toggleService,
-}: {
-  form: FormState;
-  onChange: (p: Partial<FormState>) => void;
-  toggleService: (id: string) => void;
-}) {
-  const zipList = form.zipsRaw
-    .split(/[,\s]+/)
-    .map((z) => z.trim())
-    .filter((z) => z.length === 5);
-  const validZipCount = zipList.filter(isInServiceArea).length;
-  const invalidZips = zipList.filter((z) => !isInServiceArea(z));
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="mb-3 text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
-          Which services can you offer?
-        </p>
-        <div className="grid gap-2">
-          {SERVICES_OFFERED.map((s) => {
-            const selected = form.services.includes(s.id);
-            return (
-              <button
-                type="button"
-                key={s.id}
-                onClick={() => toggleService(s.id)}
-                className="flex items-center justify-between rounded-xl px-4 py-3 text-left transition-all"
-                style={{
-                  background: selected
-                    ? "var(--color-surface)"
-                    : "white",
-                  border: `2px solid ${
-                    selected ? "var(--color-accent)" : "var(--color-rule)"
-                  }`,
-                }}
-              >
-                <span className="font-medium" style={{ color: "var(--color-ink)" }}>
-                  {s.label}
-                </span>
-                {selected && (
-                  <span style={{ color: "var(--color-accent)" }}>✓</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <Field
-        label="ZIP codes you'll cover"
-        hint="Enter ZIPs separated by commas or spaces (e.g. 30309, 30312, 30327)"
-      >
-        <textarea
-          value={form.zipsRaw}
-          onChange={(e) => onChange({ zipsRaw: e.target.value })}
-          placeholder="30309, 30312, 30327"
-          rows={3}
-          className="form-input"
-          style={{ resize: "vertical" }}
-        />
-        {validZipCount > 0 && (
-          <p
-            className="mt-2 text-sm font-medium"
-            style={{ color: "var(--color-success)" }}
-          >
-            ✓ {validZipCount} ZIP{validZipCount === 1 ? "" : "s"} we serve
-          </p>
-        )}
-        {invalidZips.length > 0 && (
-          <p className="mt-1 text-sm" style={{ color: "var(--color-danger)" }}>
-            We don&apos;t serve: {invalidZips.join(", ")}
-          </p>
-        )}
-      </Field>
-
-      <Checkbox
-        checked={form.hasTransportation}
-        onChange={(v) => onChange({ hasTransportation: v })}
-        label="I have reliable transportation to client locations"
-      />
-
-      <Checkbox
-        checked={form.hasInsurance}
-        onChange={(v) => onChange({ hasInsurance: v })}
-        label="I carry general liability insurance (or am willing to obtain)"
-      />
-
-      <style>{formInputCSS}</style>
-    </div>
-  );
-}
-
-function AgreementsStep({
-  form,
-  onChange,
-}: {
-  form: FormState;
-  onChange: (p: Partial<FormState>) => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <div
-        className="rounded-xl p-4 text-sm"
-        style={{
-          background: "var(--color-surface)",
-          color: "var(--color-ink-soft)",
-        }}
-      >
-        <strong className="block mb-1">Before you continue:</strong>
-        Please read each agreement carefully. These are legally binding once you
-        check the box and submit.
-      </div>
-
-      <AgreementCheck
-        checked={form.agreeContractor}
-        onChange={(v) => onChange({ agreeContractor: v })}
-        label="Independent Contractor Agreement"
-        description="I understand I am an independent contractor (1099), not an employee. I'm responsible for my own taxes, schedule, and equipment."
-        link="/join/agreement#contractor"
-      />
-
-      <AgreementCheck
-        checked={form.agreeAntiCircumvent}
-        onChange={(v) => onChange({ agreeAntiCircumvent: v })}
-        label="Anti-Circumvention Agreement"
-        description="I agree NOT to contact, solicit, or accept work from BubbleBox customers outside the platform. Violation results in immediate removal and a penalty."
-        link="/join/agreement#anti-circumvent"
-      />
-
-      <AgreementCheck
-        checked={form.agreePlatformTerms}
-        onChange={(v) => onChange({ agreePlatformTerms: v })}
-        label="Platform Terms & Pro Code of Conduct"
-        description="I agree to BubbleBox's standards: punctuality, respect, professionalism, customer privacy, and quality of work."
-        link="/join/agreement#platform"
-      />
-
-      <AgreementCheck
-        checked={form.agreeBackgroundCheck}
-        onChange={(v) => onChange({ agreeBackgroundCheck: v })}
-        label="Background Check Consent"
-        description="I consent to BubbleBox running a background check, including criminal history and identity verification."
-        link="/join/agreement#background"
-      />
-
-      <AgreementCheck
-        checked={form.agreeBackgroundDocsLater}
-        onChange={(v) => onChange({ agreeBackgroundDocsLater: v })}
-        label="Documentation Within 7 Days"
-        description="I'll provide a photo of my driver's license, completed W-9, and proof of insurance (if applicable) within 7 days of approval."
-      />
-
-      <AgreementCheck
-        checked={form.agreeStripeOnboardLater}
-        onChange={(v) => onChange({ agreeStripeOnboardLater: v })}
-        label="Stripe Payout Setup"
-        description="I'll complete Stripe payout onboarding within 7 days. BubbleBox pays daily via Stripe — Stripe collects banking info securely."
-      />
-    </div>
-  );
-}
-
-function ReviewStep({ form }: { form: FormState }) {
-  const zips = form.zipsRaw
-    .split(/[,\s]+/)
-    .map((z) => z.trim())
-    .filter((z) => z.length === 5)
-    .filter(isInServiceArea);
-
-  return (
-    <div
-      className="overflow-hidden rounded-2xl"
-      style={{
-        background: "white",
-        border: "1px solid var(--color-rule)",
-      }}
-    >
-      <div className="p-5" style={{ background: "var(--color-surface)" }}>
-        <h3 className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
-          {form.firstName} {form.lastName}
-        </h3>
-        <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-          Application summary
-        </p>
-      </div>
-      <dl className="divide-y" style={{ borderColor: "var(--color-rule)" }}>
-        <Row label="Phone" value={formatPhoneForDisplay(form.phone)} />
-        <Row label="Email" value={form.email} />
-        <Row label="Experience" value={form.yearsExperience || "—"} />
-        <Row
-          label="Services"
-          value={
-            form.services
-              .map((id) => SERVICES_OFFERED.find((s) => s.id === id)?.label)
-              .filter(Boolean)
-              .join(", ") || "—"
-          }
-        />
-        <Row label="ZIPs" value={`${zips.length} (${zips.slice(0, 3).join(", ")}${zips.length > 3 ? "..." : ""})`} />
-        <Row
-          label="Transportation"
-          value={form.hasTransportation ? "Yes" : "No"}
-        />
-        <Row
-          label="Insurance"
-          value={form.hasInsurance ? "Yes" : "No"}
-        />
-      </dl>
-      <div
-        className="p-4 text-xs"
-        style={{
-          background: "var(--color-surface)",
-          color: "var(--color-muted)",
-          borderTop: "1px solid var(--color-rule)",
-        }}
-      >
-        After you submit, we&apos;ll review within 24-48 hours and text you
-        next steps. Approved pros receive job offers via SMS.
-      </div>
-    </div>
-  );
-}
-
-/* =================== Helpers =================== */
-
-const formInputCSS = `
-  .form-input {
-    width: 100%;
-    border-radius: 0.75rem;
-    padding: 0.75rem 1rem;
-    font-size: 16px;
-    background: white;
-    border: 2px solid var(--color-rule);
-    color: var(--color-ink);
-  }
-  .form-input:focus {
-    outline: none;
-    border-color: var(--color-accent);
-  }
-`;
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span
-        className="mb-2 block text-sm font-semibold"
-        style={{ color: "var(--color-ink)" }}
-      >
-        {label}
-      </span>
+    <div>
+      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", marginBottom: 6, display: "block" }}>
+        {label} {required && <span style={{ color: "var(--color-danger)" }}>*</span>}
+        {hint && <span style={{ fontWeight: 400, color: "var(--color-muted)", fontSize: 12, marginLeft: 4 }}>({hint})</span>}
+      </label>
       {children}
-      {hint && (
-        <span
-          className="mt-2 block text-xs"
-          style={{ color: "var(--color-muted)" }}
-        >
-          {hint}
-        </span>
-      )}
-    </label>
-  );
-}
-
-function Checkbox({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-5 w-5 cursor-pointer accent-[var(--color-accent)]"
-      />
-      <span className="text-sm" style={{ color: "var(--color-ink)" }}>
-        {label}
-      </span>
-    </label>
-  );
-}
-
-function AgreementCheck({
-  checked,
-  onChange,
-  label,
-  description,
-  link,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  description: string;
-  link?: string;
-}) {
-  return (
-    <label
-      className="flex cursor-pointer gap-3 rounded-xl p-4 transition-colors"
-      style={{
-        background: checked ? "var(--color-surface)" : "white",
-        border: `1px solid ${
-          checked ? "var(--color-accent)" : "var(--color-rule)"
-        }`,
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-5 w-5 cursor-pointer accent-[var(--color-accent)]"
-      />
-      <div className="flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="font-semibold" style={{ color: "var(--color-ink)" }}>
-            {label}
-          </span>
-          {link && (
-            <Link
-              href={link}
-              target="_blank"
-              className="text-xs underline whitespace-nowrap"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Read full
-            </Link>
-          )}
-        </div>
-        <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-          {description}
-        </p>
-      </div>
-    </label>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 px-5 py-3 text-sm">
-      <dt style={{ color: "var(--color-muted)" }}>{label}</dt>
-      <dd
-        className="text-right font-medium"
-        style={{ color: "var(--color-ink)" }}
-      >
-        {value}
-      </dd>
     </div>
   );
 }
 
-function stepHeading(step: number): string {
-  return ["Join BubbleBox", "About your service", "Review the agreements", "Almost there"][step];
+function CheckGrid({ items, selected, onToggle }: { items: { id: string; label: string }[]; selected: Set<string>; onToggle: (id: string) => void }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {items.map(item => {
+        const sel = selected.has(item.id);
+        return (
+          <button key={item.id} type="button" onClick={() => onToggle(item.id)} style={{ display: "flex", alignItems: "center", gap: 8, background: sel ? "var(--color-surface)" : "white", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 600, color: sel ? "var(--color-accent-deep)" : "var(--color-ink-mid)", cursor: "pointer", transition: "all 0.15s", fontFamily: "inherit" }}>
+            <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, background: sel ? "var(--color-accent)" : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {sel && <svg width={10} height={7} viewBox="0 0 10 7" fill="none"><path d="M1 3.5l3 3 5-5" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>}
+            </div>
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
-function stepSubhead(step: number): string {
-  return [
-    "Tell us a bit about yourself. Takes about 3 minutes.",
-    "Where you work and what you offer.",
-    "Read each one carefully — these are legally binding.",
-    "Review your application before submitting.",
-  ][step];
+function RadioGrid({ items, value, onChange }: { items: { id: string; label: string }[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {items.map(item => {
+        const sel = value === item.id;
+        return (
+          <button key={item.id} type="button" onClick={() => onChange(item.id)} style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 8, background: sel ? "var(--color-surface)" : "white", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, fontWeight: 600, color: sel ? "var(--color-accent-deep)" : "var(--color-ink-mid)", cursor: "pointer", transition: "all 0.15s", fontFamily: "inherit" }}>
+            <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, background: sel ? "var(--color-accent)" : "white", flexShrink: 0, position: "relative" }}>
+              {sel && <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: "white" }} />}
+            </div>
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
-function validateStep(step: number, form: FormState): boolean {
-  switch (step) {
-    case 0:
-      return (
-        form.firstName.trim().length >= 1 &&
-        form.lastName.trim().length >= 1 &&
-        toE164USPhone(form.phone) !== null &&
-        /\S+@\S+\.\S+/.test(form.email) &&
-        form.yearsExperience.length > 0
-      );
-    case 1: {
-      const zips = form.zipsRaw
-        .split(/[,\s]+/)
-        .map((z) => z.trim())
-        .filter((z) => z.length === 5)
-        .filter(isInServiceArea);
-      return form.services.length >= 1 && zips.length >= 1;
-    }
-    case 2:
-      return (
-        form.agreeContractor &&
-        form.agreeAntiCircumvent &&
-        form.agreePlatformTerms &&
-        form.agreeBackgroundCheck &&
-        form.agreeBackgroundDocsLater &&
-        form.agreeStripeOnboardLater
-      );
-    case 3:
-      return true;
-    default:
-      return false;
-  }
+function ConsentBox({ checked, onClick, children }: { checked: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <div onClick={onClick} style={{ display: "flex", gap: 12, padding: 14, background: checked ? "var(--color-surface)" : "white", border: `2px solid ${checked ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, cursor: "pointer", transition: "all 0.15s" }}>
+      <div style={{ width: 22, height: 22, minWidth: 22, borderRadius: 5, border: `2px solid ${checked ? "var(--color-accent)" : "var(--color-rule)"}`, background: checked ? "var(--color-accent)" : "white", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 2 }}>
+        {checked && <svg width={12} height={9} viewBox="0 0 12 9" fill="none"><path d="M1 4.5l3.5 3.5 6-6" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--color-ink-mid)", lineHeight: 1.55 }}>{children}</div>
+    </div>
+  );
 }
