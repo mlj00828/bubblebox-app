@@ -9,6 +9,7 @@ const NAV_LINKS: [string, string][] = [
   ["/#pricing", "Pricing"],
   ["/#reviews", "Reviews"],
   ["/#faq", "FAQ"],
+  ["/join", "Join Our Team"],
 ];
 
 export function Header() {
@@ -179,6 +180,7 @@ export function Footer() {
     ["/#pricing", "Pricing"],
     ["/#reviews", "About Us"],
     ["/#faq", "FAQ"],
+  ["/join", "Join Our Team"],
     ["/join", "Join as a Pro"],
   ];
 
