@@ -7,6 +7,16 @@ import { BubbleLogo } from "@/components/Chrome";
 import { SERVICES, formatPrice, type ServiceId } from "@/lib/services";
 import { isInServiceArea } from "@/lib/service-area";
 import { createBooking, toE164USPhone, formatPhoneForDisplay, BookingError } from "@/lib/api";
+import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
+const STRIPE_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
+const stripePromise: Promise<StripeJs | null> | null =
+  typeof window !== "undefined" && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+    : null;
+
+
 
 // ── Types ──────────────────────────────────────────────────────────────
 type Window = "morning" | "afternoon" | "evening";
@@ -36,6 +46,8 @@ interface BookingState {
   cardNum: string;
   cardExp: string;
   cardCvv: string;
+  payConfirmed: boolean;
+  clientSecret: string | null;
 }
 
 // ── Pricing constants ──────────────────────────────────────────────────
@@ -69,7 +81,7 @@ const TIME_SLOTS = ["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 P
 const STEP_NAMES = ["Choose Service","Home Size","Add-Ons","Frequency","Date & Time","Your Address","Contact Info","Payment","Review & Confirm"];
 
 function defaultState(): BookingState {
-  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"" };
+  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"",payConfirmed:false,clientSecret:null };
 }
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -119,6 +131,7 @@ function BookPageInner() {
 
   function validateStep() {
     switch (step) {
+      case 8: return state.payConfirmed;
       case 1: return !!state.service;
       case 5: return !!state.date && !!state.time;
       case 6: return state.address.trim().length >= 5 && state.zip.length === 5;
@@ -137,7 +150,7 @@ function BookPageInner() {
     const addressLine = [state.address, state.apt].filter(Boolean).join(", ");
     const addonNames = [...state.addons].filter(id => id !== "ownsupplies").map(id => ADDONS.find(a => a.id === id)?.name).filter(Boolean);
     const suppliesNote = state.addons.has("ownsupplies") ? "Customer will provide own supplies ($10 discount applied)." : "";
-    const notes = [state.specialInstructions, suppliesNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : ""].filter(Boolean).join(" | ");
+    const notes = [state.specialInstructions, suppliesNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : "", `Final total: $${calcTotal()}`].filter(Boolean).join(" | ");
 
     const windowMap: Record<string,Window> = { "8:00 AM":"morning","9:00 AM":"morning","10:00 AM":"morning","11:00 AM":"morning","12:00 PM":"afternoon","1:00 PM":"afternoon","2:00 PM":"afternoon","3:00 PM":"afternoon","4:00 PM":"afternoon","5:00 PM":"evening","6:00 PM":"evening","7:00 PM":"evening","8:00 PM":"evening" };
 
@@ -153,6 +166,16 @@ function BookPageInner() {
       });
 
       try { sessionStorage.setItem(`booking-phone-${res.id}`, phoneE164); } catch {}
+
+      // Attach Stripe payment intent to the booking
+      if (state.clientSecret) {
+        const pi = state.clientSecret.split("_secret_")[0];
+        fetch(`${STRIPE_API_BASE}/api/payments/attach-to-booking`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ booking_id: res.id, payment_intent_id: pi }),
+        }).catch(() => {});
+      }
       setConfirmData({ bookingId: res.id, price: calcTotal() });
       setConfirmed(true);
     } catch (err) {
@@ -507,6 +530,32 @@ function Step7({ state, update }: { state: BookingState; update: (p: Partial<Boo
 }
 
 function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: Partial<BookingState>) => void; calcTotal: () => number }) {
+  const [secretLoading, setSecretLoading] = useState(false);
+  const [secretError, setSecretError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.clientSecret) return;
+    const total = calcTotal();
+    if (total <= 0) return;
+    setSecretLoading(true);
+    fetch(`${STRIPE_API_BASE}/api/payments/create-intent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount_cents: total * 100,
+        customer_email: state.email || undefined,
+        customer_name: `${state.firstName} ${state.lastName}`.trim() || undefined,
+      }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data?.client_secret) update({ clientSecret: j.data.client_secret });
+        else setSecretError("Couldn't initialize payment. Please try again.");
+      })
+      .catch(() => setSecretError("Couldn't reach payment server."))
+      .finally(() => setSecretLoading(false));
+  }, []);
+
   return (
     <>
       <StepHeader eyebrow="Step 8 — Payment" title="Payment details" sub="A pre-authorization hold is placed on your card at booking. You are fully charged only after your cleaning is complete." />
@@ -519,32 +568,21 @@ function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: 
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#15803d", fontWeight: 600 }}>
-          🔒 Secure checkout — 256-bit encrypted. You won't be charged until service is complete.
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[["card","💳","Credit / Debit Card"],["applepay","🍎","Apple Pay"],["googlepay","🅖","Google Pay"],["cashapp","💵","Cash App Pay"]].map(([id,icon,label]) => {
-            const sel = state.payMethod === id;
-            return (
-              <div key={id} onClick={() => update({ payMethod: id as PayMethod })} style={{ border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: 14, cursor: "pointer", textAlign: "center", fontSize: 13, fontWeight: 600, color: sel ? "var(--color-accent)" : "var(--color-ink-mid)", background: sel ? "var(--color-surface)" : "white", display: "flex", flexDirection: "column", gap: 6, alignItems: "center", transition: "all 0.15s" }}>
-                <span style={{ fontSize: 22 }}>{icon}</span>{label}
-              </div>
-            );
-          })}
+          🔒 Secure checkout — Stripe-encrypted. Pre-auth hold only; you won't be charged until service is complete.
         </div>
 
-        {state.payMethod === "card" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <TextInput label="Cardholder Name" placeholder="Jane Smith" value={state.cardName} onChange={v => update({ cardName: v })} autoComplete="cc-name" />
-            <TextInput label="Card Number" placeholder="1234 5678 9012 3456" value={state.cardNum} onChange={v => update({ cardNum: v.replace(/\D/g,"").slice(0,16) })} inputMode="numeric" autoComplete="cc-number" maxLength={19} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <TextInput label="Expiration" placeholder="MM/YY" value={state.cardExp} onChange={v => { let x = v.replace(/\D/g,"").slice(0,4); if (x.length >= 2) x = x.slice(0,2) + "/" + x.slice(2); update({ cardExp: x }); }} maxLength={5} />
-              <TextInput label="CVV" placeholder="•••" value={state.cardCvv} onChange={v => update({ cardCvv: v.replace(/\D/g,"").slice(0,4) })} inputMode="numeric" maxLength={4} />
-            </div>
-          </div>
-        ) : (
-          <div style={{ background: "var(--color-surface)", borderRadius: 16, padding: 32, textAlign: "center", border: "1.5px dashed var(--color-surface-mid)" }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>{state.payMethod === "applepay" ? "🍎" : state.payMethod === "googlepay" ? "🅖" : "💵"}</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-ink-mid)" }}>You'll be redirected to complete payment securely after confirming your booking.</div>
+        {secretLoading && <div style={{ textAlign: "center", padding: 24, color: "var(--color-muted)" }}>Loading payment form…</div>}
+        {secretError && <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 14, color: "var(--color-danger)" }}>{secretError}</div>}
+
+        {state.clientSecret && stripePromise && (
+          <Elements stripe={stripePromise} options={{ clientSecret: state.clientSecret, appearance: { theme: "stripe" } }}>
+            <StripePayInner state={state} update={update} />
+          </Elements>
+        )}
+
+        {state.payConfirmed && (
+          <div style={{ padding: "12px 16px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, fontSize: 14, color: "#15803d", fontWeight: 600, textAlign: "center" }}>
+            ✅ Payment method confirmed — you can continue to review.
           </div>
         )}
 
@@ -553,6 +591,34 @@ function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: 
         </div>
       </div>
     </>
+  );
+}
+
+function StripePayInner({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function confirm() {
+    if (!stripe || !elements) return;
+    setSubmitting(true); setErr(null);
+    const { error } = await elements.submit();
+    if (error) { setErr(error.message || "Card error"); setSubmitting(false); return; }
+    update({ payConfirmed: true });
+    setSubmitting(false);
+  }
+
+  return (
+    <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 12, padding: 16 }}>
+      <PaymentElement />
+      {err && <div style={{ marginTop: 10, fontSize: 13, color: "var(--color-danger)" }}>{err}</div>}
+      {!state.payConfirmed && (
+        <button onClick={confirm} disabled={!stripe || submitting} style={{ marginTop: 14, width: "100%", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 14, fontSize: 15, fontWeight: 700, cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.6 : 1, fontFamily: "inherit" }}>
+          {submitting ? "Validating…" : "Confirm Payment Method"}
+        </button>
+      )}
+    </div>
   );
 }
 
