@@ -366,7 +366,7 @@ function Step3({ state, toggleAddon, showSuppliesModal, setShowSuppliesModal, se
       {/* Supplies modal */}
       {showSuppliesModal && (
         <div onClick={() => setShowSuppliesModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(13,27,62,0.5)", zIndex: 500, display: "flex", alignItems: "flex-end", justifyContent: "center", animation: "fadeIn 0.2s ease" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "white", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", maxWidth: 640, width: "100%", animation: "slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "white", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto", animation: "slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)" }}>
             <div style={{ width: 40, height: 4, background: "var(--color-rule)", borderRadius: 99, margin: "0 auto 20px" }} />
             <div style={{ fontSize: 20, fontWeight: 700, color: "var(--color-ink)", marginBottom: 6 }}>🧴 Confirm Your Supplies</div>
             <div style={{ fontSize: 14, color: "var(--color-ink-mid)", marginBottom: 20, lineHeight: 1.5 }}>To qualify for the $10 discount, please confirm you have all of the following available for our cleaner:</div>
