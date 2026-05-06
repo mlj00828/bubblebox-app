@@ -6,6 +6,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
 export interface CreateBookingPayload {
+  estimated_total_cents?: number;
   service_id: string;
   zip: string;
   preferred_date: string; // YYYY-MM-DD
