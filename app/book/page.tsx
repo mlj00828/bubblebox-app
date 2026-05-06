@@ -653,7 +653,7 @@ function Step9({ state, calcTotal, goToStep }: { state: BookingState; calcTotal:
           <SummaryRow label="Arrival" value={state.time || "—"} />
           <SummaryRow label="Address" value={`${state.address}${state.apt ? ", " + state.apt : ""}, ${state.city}, ${state.stateCode} ${state.zip}`} />
           <SummaryRow label="Contact" value={`${state.firstName} ${state.lastName} · ${state.phone}`} />
-          <SummaryRow label="Payment" value={state.payMethod === "card" ? `•••• ${state.cardNum.slice(-4) || "????"}` : state.payMethod} />
+          <SummaryRow label="Payment" value={state.payConfirmed ? "Card on file via Stripe" : "Not confirmed"} />
           <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--color-accent)" }}>${calcTotal()}</div>
