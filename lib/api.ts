@@ -7,6 +7,7 @@ const API_BASE =
 
 export interface CreateBookingPayload {
   estimated_total_cents?: number;
+  estimated_total_cents?: number;
   service_id: string;
   zip: string;
   preferred_date: string; // YYYY-MM-DD
