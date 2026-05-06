@@ -156,6 +156,7 @@ function BookPageInner() {
 
     try {
       const res = await createBooking({
+        estimated_total_cents: calcTotal() * 100,
         service_id: state.service!,
         zip: state.zip,
         preferred_date: state.date,
