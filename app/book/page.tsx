@@ -203,7 +203,7 @@ function BookPageInner() {
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 14 }}>Booking Summary</div>
             <SummaryRow label="Confirmation #" value={<span style={{ fontFamily: "monospace", fontSize: 12 }}>{confirmData.bookingId.toUpperCase()}</span>} />
             <SummaryRow label="Date" value={`${state.date ? new Date(state.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—"} · ${state.time}`} />
-            <SummaryRow label="Address" value={`${state.address}, ${state.city}`} />
+            <SummaryRow label="Address" value={`${state.address}${state.apt ? ", " + state.apt : ""}, ${state.city}, ${state.stateCode} ${state.zip}`} />
             <SummaryRow label="Total" value={<span style={{ color: "var(--color-accent)", fontSize: 17 }}>${confirmData.price}</span>} />
           </div>
           <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#15803d", fontWeight: 600, maxWidth: 400, margin: "0 auto 24px" }}>
