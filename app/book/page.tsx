@@ -604,8 +604,15 @@ function StripePayInner({ state, update }: { state: BookingState; update: (p: Pa
   async function confirm() {
     if (!stripe || !elements) return;
     setSubmitting(true); setErr(null);
-    const { error } = await elements.submit();
-    if (error) { setErr(error.message || "Card error"); setSubmitting(false); return; }
+    const { error: submitError } = await elements.submit();
+    if (submitError) { setErr(submitError.message || "Card error"); setSubmitting(false); return; }
+    const { error: confirmError } = await stripe.confirmPayment({
+      elements,
+      clientSecret: state.clientSecret!,
+      confirmParams: { return_url: window.location.href },
+      redirect: "if_required",
+    });
+    if (confirmError) { setErr(confirmError.message || "Payment failed"); setSubmitting(false); return; }
     update({ payConfirmed: true });
     setSubmitting(false);
   }
