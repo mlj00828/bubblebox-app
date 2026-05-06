@@ -606,13 +606,16 @@ function StripePayInner({ state, update }: { state: BookingState; update: (p: Pa
     setSubmitting(true); setErr(null);
     const { error: submitError } = await elements.submit();
     if (submitError) { setErr(submitError.message || "Card error"); setSubmitting(false); return; }
-    const { error: confirmError } = await stripe.confirmPayment({
+    console.log("[stripe] calling confirmPayment with clientSecret:", state.clientSecret?.substring(0, 30));
+    const result = await stripe.confirmPayment({
       elements,
       clientSecret: state.clientSecret!,
       confirmParams: { return_url: window.location.href },
       redirect: "if_required",
     });
-    if (confirmError) { setErr(confirmError.message || "Payment failed"); setSubmitting(false); return; }
+    console.log("[stripe] confirmPayment result:", result);
+    if (result.error) { setErr(result.error.message || "Payment failed"); setSubmitting(false); return; }
+    console.log("[stripe] paymentIntent status:", result.paymentIntent?.status, "payment_method:", result.paymentIntent?.payment_method);
     update({ payConfirmed: true });
     setSubmitting(false);
   }
