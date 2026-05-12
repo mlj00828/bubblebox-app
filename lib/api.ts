@@ -6,7 +6,6 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
 export interface CreateBookingPayload {
-  estimated_total_cents?: number;
   service_id: string;
   zip: string;
   preferred_date: string; // YYYY-MM-DD
@@ -18,6 +17,8 @@ export interface CreateBookingPayload {
     phone: string; // E.164 format e.g. +14045551234
     email?: string;
   };
+  estimated_total_cents?: number;
+  promo_code?: string;
 }
 
 export interface BookingResponse {
@@ -121,4 +122,44 @@ export function formatPhoneForDisplay(input: string): string {
   const digits = input.replace(/\D/g, "").slice(-10);
   if (digits.length !== 10) return input;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+
+// ─── Promo code validation ───────────────────────────
+export interface PromoValidationSuccess {
+  valid: true;
+  code: string;
+  discount_type: "fixed" | "percent";
+  discount_value: number;
+  discount_cents: number;
+  final_cents: number;
+  message: string;
+}
+
+export class PromoError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function validatePromo(input: {
+  code: string;
+  subtotal_cents: number;
+  customer_email?: string;
+  customer_phone?: string;
+}): Promise<PromoValidationSuccess> {
+  const res = await fetch(`${API_BASE}/api/promo/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    const code = body?.error?.code || "unknown_error";
+    const msg = body?.error?.message || "Promo validation failed";
+    throw new PromoError(code, msg);
+  }
+  return body as PromoValidationSuccess;
 }
