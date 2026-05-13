@@ -6,7 +6,7 @@ import Link from "next/link";
 import { BubbleLogo } from "@/components/Chrome";
 import { SERVICES, formatPrice, type ServiceId } from "@/lib/services";
 import { isInServiceArea } from "@/lib/service-area";
-import { createBooking, toE164USPhone, formatPhoneForDisplay, BookingError } from "@/lib/api";
+import { createBooking, toE164USPhone, formatPhoneForDisplay, BookingError, validatePromo, PromoError } from "@/lib/api";
 import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
@@ -21,6 +21,7 @@ const stripePromise: Promise<StripeJs | null> | null =
 // ── Types ──────────────────────────────────────────────────────────────
 type Window = "morning" | "afternoon" | "evening";
 type PayMethod = "card" | "applepay" | "googlepay" | "cashapp";
+type PromoStatus = "idle" | "valid" | "invalid";
 
 interface BookingState {
   service: ServiceId | null;
@@ -48,6 +49,10 @@ interface BookingState {
   cardCvv: string;
   payConfirmed: boolean;
   clientSecret: string | null;
+  promoCode: string;
+  promoDiscount: number; // cents
+  promoStatus: PromoStatus;
+  promoMessage: string;
 }
 
 // ── Pricing constants ──────────────────────────────────────────────────
@@ -81,7 +86,7 @@ const TIME_SLOTS = ["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 P
 const STEP_NAMES = ["Choose Service","Home Size","Add-Ons","Frequency","Date & Time","Your Address","Contact Info","Payment","Review & Confirm"];
 
 function defaultState(): BookingState {
-  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"",payConfirmed:false,clientSecret:null };
+  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"",payConfirmed:false,clientSecret:null,promoCode:"",promoDiscount:0,promoStatus:"idle",promoMessage:"" };
 }
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -108,7 +113,8 @@ function BookPageInner() {
     }
   }, []);
 
-  function calcTotal() {
+  // Subtotal BEFORE promo discount (used for promo validation against backend)
+  function calcSubtotal() {
     if (!state.service) return 0;
     let base = BASE_PRICES[state.service] || 0;
     base += (state.bedrooms - 1) * BED_PRICE;
@@ -116,6 +122,13 @@ function BookPageInner() {
     base += state.halfBaths * HALF_BATH;
     state.addons.forEach(a => { base += ADDON_PRICES[a] || 0; });
     return Math.round(base * (1 - (FREQ_DISCOUNTS[state.frequency] || 0)));
+  }
+
+  // Final total AFTER promo discount
+  function calcTotal() {
+    const subtotal = calcSubtotal();
+    if (state.promoStatus !== "valid") return subtotal;
+    return Math.max(0, subtotal - Math.round(state.promoDiscount / 100));
   }
 
   function update(patch: Partial<BookingState>) {
@@ -150,7 +163,8 @@ function BookPageInner() {
     const addressLine = [state.address, state.apt].filter(Boolean).join(", ");
     const addonNames = [...state.addons].filter(id => id !== "ownsupplies").map(id => ADDONS.find(a => a.id === id)?.name).filter(Boolean);
     const suppliesNote = state.addons.has("ownsupplies") ? "Customer will provide own supplies ($10 discount applied)." : "";
-    const notes = [state.specialInstructions, suppliesNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : "", `Final total: $${calcTotal()}`].filter(Boolean).join(" | ");
+    const promoNote = state.promoStatus === "valid" ? `Promo code ${state.promoCode} applied ($${Math.round(state.promoDiscount / 100)} off).` : "";
+    const notes = [state.specialInstructions, suppliesNote, promoNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : "", `Final total: $${calcTotal()}`].filter(Boolean).join(" | ");
 
     const windowMap: Record<string,Window> = { "8:00 AM":"morning","9:00 AM":"morning","10:00 AM":"morning","11:00 AM":"morning","12:00 PM":"afternoon","1:00 PM":"afternoon","2:00 PM":"afternoon","3:00 PM":"afternoon","4:00 PM":"afternoon","5:00 PM":"evening","6:00 PM":"evening","7:00 PM":"evening","8:00 PM":"evening" };
 
@@ -164,6 +178,7 @@ function BookPageInner() {
         address_line: addressLine,
         notes: notes || undefined,
         customer: { name: `${state.firstName} ${state.lastName}`.trim(), phone: phoneE164, email: state.email || undefined },
+        promo_code: state.promoStatus === "valid" ? state.promoCode : undefined,
       });
 
       try { sessionStorage.setItem(`booking-phone-${res.id}`, phoneE164); } catch {}
@@ -217,7 +232,9 @@ function BookPageInner() {
   }
 
   const price = calcTotal();
+  const subtotal = calcSubtotal();
   const showPriceBar = step <= 9;
+  const hasPromo = state.promoStatus === "valid" && state.promoDiscount > 0;
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-paper)", fontFamily: "var(--font-sans)", display: "flex", flexDirection: "column" }}>
@@ -248,8 +265,8 @@ function BookPageInner() {
         {step === 5 && <Step5 state={state} update={update} calYear={calYear} calMonth={calMonth} setCalYear={setCalYear} setCalMonth={setCalMonth} />}
         {step === 6 && <Step6 state={state} update={update} />}
         {step === 7 && <Step7 state={state} update={update} />}
-        {step === 8 && <Step8 state={state} update={update} calcTotal={calcTotal} />}
-        {step === 9 && <Step9 state={state} calcTotal={calcTotal} goToStep={setStep} />}
+        {step === 8 && <Step8 state={state} update={update} calcTotal={calcTotal} calcSubtotal={calcSubtotal} />}
+        {step === 9 && <Step9 state={state} calcTotal={calcTotal} calcSubtotal={calcSubtotal} goToStep={setStep} />}
 
         {serverError && (
           <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 14, color: "var(--color-danger)" }}>{serverError}</div>
@@ -265,8 +282,16 @@ function BookPageInner() {
             </button>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Estimated Total</span>
-              <span style={{ fontSize: 26, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.5px", lineHeight: 1 }}>{price > 0 ? `$${price}` : "--"}</span>
-              {state.frequency !== "once" && <span style={{ fontSize: 12, color: "var(--color-muted)" }}>per visit ({state.frequency})</span>}
+              {hasPromo ? (
+                <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "var(--color-muted)", textDecoration: "line-through" }}>${subtotal}</span>
+                  <span style={{ fontSize: 26, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.5px", lineHeight: 1 }}>${price}</span>
+                </div>
+              ) : (
+                <span style={{ fontSize: 26, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.5px", lineHeight: 1 }}>{price > 0 ? `$${price}` : "--"}</span>
+              )}
+              {hasPromo && <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 700 }}>${Math.round(state.promoDiscount / 100)} off ({state.promoCode})</span>}
+              {!hasPromo && state.frequency !== "once" && <span style={{ fontSize: 12, color: "var(--color-muted)" }}>per visit ({state.frequency})</span>}
             </div>
             <button
               onClick={() => { if (step < 9 && validateStep()) setStep(s => s + 1); else if (step === 9) handleConfirm(); }}
@@ -530,10 +555,11 @@ function Step7({ state, update }: { state: BookingState; update: (p: Partial<Boo
   );
 }
 
-function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: Partial<BookingState>) => void; calcTotal: () => number }) {
+function Step8({ state, update, calcTotal, calcSubtotal }: { state: BookingState; update: (p: Partial<BookingState>) => void; calcTotal: () => number; calcSubtotal: () => number }) {
   const [secretLoading, setSecretLoading] = useState(false);
   const [secretError, setSecretError] = useState<string | null>(null);
 
+  // Re-create the client secret whenever the total changes (e.g. after applying/removing a promo)
   useEffect(() => {
     if (state.clientSecret) return;
     const total = calcTotal();
@@ -546,6 +572,7 @@ function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: 
         amount_cents: total * 100,
         customer_email: state.email || undefined,
         customer_name: `${state.firstName} ${state.lastName}`.trim() || undefined,
+        promo_code: state.promoStatus === "valid" ? state.promoCode : undefined,
       }),
     })
       .then((r) => r.json())
@@ -555,19 +582,44 @@ function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: 
       })
       .catch(() => setSecretError("Couldn't reach payment server."))
       .finally(() => setSecretLoading(false));
-  }, []);
+  }, [state.clientSecret]);
+
+  const subtotal = calcSubtotal();
+  const total = calcTotal();
+  const hasPromo = state.promoStatus === "valid" && state.promoDiscount > 0;
 
   return (
     <>
       <StepHeader eyebrow="Step 8 — Payment" title="Payment details" sub="A pre-authorization hold is placed on your card at booking. You are fully charged only after your cleaning is complete." />
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+        <PromoInput state={state} update={update} calcSubtotal={calcSubtotal} />
+
         <div style={{ background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)", borderRadius: 16, padding: "16px 18px" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Order Summary</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
-            <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-accent)" }}>${calcTotal()}</span>
-          </div>
+          {hasPromo ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: "var(--color-ink-mid)", marginBottom: 4 }}>
+                <span>Subtotal</span>
+                <span>${subtotal}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: "#16a34a", marginBottom: 10, fontWeight: 600 }}>
+                <span>Promo ({state.promoCode})</span>
+                <span>−${Math.round(state.promoDiscount / 100)}</span>
+              </div>
+              <div style={{ borderTop: "1px solid var(--color-surface-mid)", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
+                <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-accent)" }}>${total}</span>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-accent)" }}>${total}</span>
+            </div>
+          )}
         </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#15803d", fontWeight: 600 }}>
           🔒 Secure checkout — Stripe-encrypted. Pre-auth hold only; you won't be charged until service is complete.
         </div>
@@ -592,6 +644,86 @@ function Step8({ state, update, calcTotal }: { state: BookingState; update: (p: 
         </div>
       </div>
     </>
+  );
+}
+
+function PromoInput({ state, update, calcSubtotal }: { state: BookingState; update: (p: Partial<BookingState>) => void; calcSubtotal: () => number }) {
+  const [applying, setApplying] = useState(false);
+
+  async function apply() {
+    const code = state.promoCode.trim().toUpperCase();
+    if (!code) return;
+    setApplying(true);
+    try {
+      const result = await validatePromo({
+        code,
+        subtotal_cents: calcSubtotal() * 100,
+        customer_email: state.email || undefined,
+        customer_phone: toE164USPhone(state.phone) || undefined,
+      });
+      update({
+        promoCode: code,
+        promoDiscount: result.discount_cents,
+        promoStatus: "valid",
+        promoMessage: result.message,
+        clientSecret: null, // force payment intent re-creation with new amount
+        payConfirmed: false, // user needs to re-confirm payment at new amount
+      });
+    } catch (err) {
+      const msg = err instanceof PromoError ? err.message : "Couldn't validate code. Try again.";
+      update({ promoDiscount: 0, promoStatus: "invalid", promoMessage: msg });
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function clear() {
+    update({
+      promoCode: "",
+      promoDiscount: 0,
+      promoStatus: "idle",
+      promoMessage: "",
+      clientSecret: null, // force payment intent re-creation at full price
+      payConfirmed: false,
+    });
+  }
+
+  return (
+    <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Promo Code</div>
+      {state.promoStatus === "valid" ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#15803d" }}>✓ {state.promoCode} applied</div>
+            <div style={{ fontSize: 12, color: "var(--color-muted)" }}>{state.promoMessage}</div>
+          </div>
+          <button onClick={clear} style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}>Remove</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text"
+              placeholder="Promo code (optional)"
+              value={state.promoCode}
+              onChange={e => update({ promoCode: e.target.value.toUpperCase(), promoStatus: "idle", promoMessage: "" })}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
+              style={{ flex: 1, padding: "11px 12px", border: "2px solid var(--color-rule)", borderRadius: 10, fontSize: 14, color: "var(--color-ink)", background: "white", outline: "none", textTransform: "uppercase", fontFamily: "inherit" }}
+            />
+            <button
+              onClick={apply}
+              disabled={!state.promoCode.trim() || applying}
+              style={{ background: "var(--color-accent)", color: "white", border: "none", borderRadius: 10, padding: "0 18px", fontSize: 14, fontWeight: 700, cursor: applying ? "wait" : "pointer", opacity: (!state.promoCode.trim() || applying) ? 0.5 : 1, fontFamily: "inherit" }}
+            >
+              {applying ? "..." : "Apply"}
+            </button>
+          </div>
+          {state.promoStatus === "invalid" && (
+            <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-danger)" }}>{state.promoMessage}</div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -633,12 +765,15 @@ function StripePayInner({ state, update }: { state: BookingState; update: (p: Pa
   );
 }
 
-function Step9({ state, calcTotal, goToStep }: { state: BookingState; calcTotal: () => number; goToStep: (n: number) => void }) {
+function Step9({ state, calcTotal, calcSubtotal, goToStep }: { state: BookingState; calcTotal: () => number; calcSubtotal: () => number; goToStep: (n: number) => void }) {
   const svc = SERVICES.find(s => s.id === state.service);
   const freq = FREQUENCIES.find(f => f.id === state.frequency);
   const addonList = [...state.addons].map(id => ADDONS.find(a => a.id === id)?.name).filter(Boolean).join(", ");
   const disc = FREQ_DISCOUNTS[state.frequency];
   const dateStr = state.date ? new Date(state.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "Not selected";
+  const subtotal = calcSubtotal();
+  const total = calcTotal();
+  const hasPromo = state.promoStatus === "valid" && state.promoDiscount > 0;
 
   return (
     <>
@@ -654,9 +789,29 @@ function Step9({ state, calcTotal, goToStep }: { state: BookingState; calcTotal:
           <SummaryRow label="Address" value={`${state.address}${state.apt ? ", " + state.apt : ""}, ${state.city}, ${state.stateCode} ${state.zip}`} />
           <SummaryRow label="Contact" value={`${state.firstName} ${state.lastName} · ${state.phone}`} />
           <SummaryRow label="Payment" value={state.payConfirmed ? "Card on file via Stripe" : "Not confirmed"} />
-          <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--color-accent)" }}>${calcTotal()}</div>
+          {hasPromo && <SummaryRow label="Promo Code" value={<span style={{ color: "#16a34a" }}>{state.promoCode} (−${Math.round(state.promoDiscount / 100)})</span>} />}
+          <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
+            {hasPromo ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, color: "var(--color-ink-mid)", marginBottom: 4 }}>
+                  <span>Subtotal</span>
+                  <span>${subtotal}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, color: "#16a34a", marginBottom: 8, fontWeight: 600 }}>
+                  <span>Promo ({state.promoCode})</span>
+                  <span>−${Math.round(state.promoDiscount / 100)}</span>
+                </div>
+                <div style={{ borderTop: "1px solid var(--color-surface-mid)", paddingTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
+                  <span style={{ fontSize: 24, fontWeight: 700, color: "var(--color-accent)" }}>${total}</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--color-accent)" }}>${total}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
