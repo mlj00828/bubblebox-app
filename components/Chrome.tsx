@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 const NAV_LINKS: [string, string][] = [
   ["/#services", "Services"],
@@ -12,8 +13,32 @@ const NAV_LINKS: [string, string][] = [
   ["/join", "Join Our Team"],
 ];
 
+// Hook to track auth state. Returns the user's email (truthy = signed in) or null.
+function useAuthEmail(): string | null {
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      setEmail(data.session?.user?.email ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setEmail(session?.user?.email ?? null);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  return email;
+}
+
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const email = useAuthEmail();
+  const initial = email ? email[0].toUpperCase() : "";
 
   return (
     <header
@@ -98,6 +123,69 @@ export function Header() {
           >
             Book Now →
           </Link>
+
+          {/* Account avatar (signed in) or Sign in link (signed out) */}
+          {email ? (
+            <Link
+              href="/account"
+              aria-label="Your account"
+              title={email}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: "50%",
+                background: "var(--color-surface)",
+                color: "var(--color-accent-deep)",
+                fontWeight: 800,
+                fontSize: 15,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textDecoration: "none",
+                marginLeft: 12,
+                border: "2px solid var(--color-rule)",
+                transition: "all 0.15s",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = "var(--color-accent)";
+                (e.currentTarget as HTMLElement).style.background = "var(--color-accent)";
+                (e.currentTarget as HTMLElement).style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = "var(--color-rule)";
+                (e.currentTarget as HTMLElement).style.background = "var(--color-surface)";
+                (e.currentTarget as HTMLElement).style.color = "var(--color-accent-deep)";
+              }}
+            >
+              {initial}
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "var(--color-ink-mid)",
+                textDecoration: "none",
+                padding: "8px 14px",
+                borderRadius: 8,
+                marginLeft: 8,
+                whiteSpace: "nowrap",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "var(--color-accent)";
+                (e.currentTarget as HTMLElement).style.background = "var(--color-surface)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "var(--color-ink-mid)";
+                (e.currentTarget as HTMLElement).style.background = "transparent";
+              }}
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
 
         {/* Mobile hamburger */}
@@ -136,6 +224,14 @@ export function Header() {
               {label}
             </Link>
           ))}
+          {/* Mobile account/signin link */}
+          <Link
+            href={email ? "/account" : "/login"}
+            onClick={() => setMenuOpen(false)}
+            style={{ fontSize: 16, fontWeight: 600, color: "var(--color-accent)", textDecoration: "none", padding: "12px 0", borderBottom: "1px solid var(--color-surface)" }}
+          >
+            {email ? "My Account" : "Sign in"}
+          </Link>
           <Link
             href="/book"
             onClick={() => setMenuOpen(false)}
