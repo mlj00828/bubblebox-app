@@ -6,6 +6,7 @@ import {
   fetchApplications,
   fetchApplication,
   updateApplication,
+  approveApplication,
   AdminApiError,
   AdminApplication,
   ApplicationStatus,
@@ -26,6 +27,7 @@ export default function AdminApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [openApp, setOpenApp] = useState<AdminApplication | null>(null);
+  const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,12 +49,33 @@ export default function AdminApplicationsPage() {
     fetchApplication(openId).then(setOpenApp).catch(() => setOpenId(null));
   }, [openId]);
 
-  async function handleSave(patch: { status?: ApplicationStatus; review_notes?: string }) {
+  // Auto-dismiss toast after 5 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function handleReject(notes: string) {
     if (!openApp) return;
-    const updated = await updateApplication(openApp.id, patch);
+    const updated = await updateApplication(openApp.id, { status: "rejected", review_notes: notes });
     setApps((rows) => rows.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
     setOpenId(null);
     setOpenApp(null);
+    setToast({ kind: "success", text: `${updated.first_name} ${updated.last_name} marked as rejected.` });
+  }
+
+  async function handleApprove(notes: string): Promise<void> {
+    if (!openApp) return;
+    const result = await approveApplication(openApp.id, notes);
+    // Refresh the list so the approved row shows new status
+    await load();
+    setOpenId(null);
+    setOpenApp(null);
+    setToast({
+      kind: "success",
+      text: `${result.full_name} approved. Invite email sent to ${result.email}.`,
+    });
   }
 
   return (
@@ -128,8 +151,21 @@ export default function AdminApplicationsPage() {
       </div>
 
       {openApp && (
-        <ApplicationModal app={openApp} onClose={() => setOpenId(null)} onSave={handleSave} />
+        <ApplicationModal
+          app={openApp}
+          onClose={() => setOpenId(null)}
+          onApprove={handleApprove}
+          onReject={handleReject}
+        />
       )}
+
+      {toast && (
+        <div className={`approve-toast approve-toast-${toast.kind}`}>
+          {toast.text}
+        </div>
+      )}
+
+      <ToastStyles />
     </>
   );
 }
@@ -137,24 +173,39 @@ export default function AdminApplicationsPage() {
 function ApplicationModal({
   app,
   onClose,
-  onSave,
+  onApprove,
+  onReject,
 }: {
   app: AdminApplication;
   onClose: () => void;
-  onSave: (patch: { status?: ApplicationStatus; review_notes?: string }) => Promise<void>;
+  onApprove: (notes: string) => Promise<void>;
+  onReject: (notes: string) => Promise<void>;
 }) {
   const [notes, setNotes] = useState(app.review_notes || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
 
-  async function decide(status: ApplicationStatus) {
+  async function doReject() {
     setSaving(true);
     setError(null);
     try {
-      await onSave({ status, review_notes: notes });
+      await onReject(notes);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : "Reject failed");
       setSaving(false);
+    }
+  }
+
+  async function doApprove() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onApprove(notes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Approve failed");
+      setSaving(false);
+      setConfirmingApprove(false);
     }
   }
 
@@ -222,15 +273,108 @@ function ApplicationModal({
           {error && <div className="admin-login-error">{error}</div>}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-red" onClick={() => decide("rejected")} disabled={saving}>
+          <button className="btn btn-red" onClick={doReject} disabled={saving || app.status !== "pending"}>
             Reject
           </button>
           <button className="btn btn-outline" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="btn btn-green" onClick={() => decide("approved")} disabled={saving}>
+          <button
+            className="btn btn-green"
+            onClick={() => setConfirmingApprove(true)}
+            disabled={saving || app.status !== "pending"}
+          >
             {saving ? "Saving…" : "Approve"}
           </button>
         </div>
       </div>
+
+      {confirmingApprove && (
+        <ConfirmApproveModal
+          app={app}
+          saving={saving}
+          onCancel={() => setConfirmingApprove(false)}
+          onConfirm={doApprove}
+        />
+      )}
     </div>
+  );
+}
+
+function ConfirmApproveModal({
+  app,
+  saving,
+  onCancel,
+  onConfirm,
+}: {
+  app: AdminApplication;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="modal-overlay"
+      style={{ zIndex: 1100 }}
+      onClick={(e) => e.target === e.currentTarget && !saving && onCancel()}
+    >
+      <div className="admin-modal" style={{ maxWidth: 480 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title-text">Approve {app.first_name} {app.last_name}?</div>
+          </div>
+        </div>
+        <div className="modal-body">
+          <p style={{ marginBottom: 16, color: "var(--text-mid, #3B5280)", lineHeight: 1.5 }}>
+            This will send an invitation email to{" "}
+            <strong style={{ color: "var(--text, #0D1B3E)" }}>{app.email}</strong> so they can create
+            their cleaner account password. A pro record will be created and they'll be able to sign in at{" "}
+            <strong>/login</strong> as a cleaner.
+          </p>
+          <p style={{ fontSize: 13, color: "var(--text-light, #7B9DC7)", lineHeight: 1.5 }}>
+            Double-check the email address is correct. This action can't be easily undone.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onCancel} disabled={saving}>
+            Cancel
+          </button>
+          <button className="btn btn-green" onClick={onConfirm} disabled={saving}>
+            {saving ? "Sending invite…" : "Yes, approve & invite"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Minimal toast styles, scoped to this page
+function ToastStyles() {
+  return (
+    <style jsx global>{`
+      .approve-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 2000;
+        padding: 14px 20px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        max-width: 400px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        animation: toast-slide-in 0.25s ease-out;
+      }
+      .approve-toast-success {
+        background: #16A34A;
+        color: white;
+      }
+      .approve-toast-error {
+        background: #DC2626;
+        color: white;
+      }
+      @keyframes toast-slide-in {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+    `}</style>
   );
 }
