@@ -273,16 +273,16 @@ export function updateApplication(
 
 // Approves an application: creates Supabase user, creates pros row, sends invite email.
 // Use this instead of updateApplication({ status: "approved" }) when you want the full flow.
-export function approveApplication(id: string, review_notes?: string) {
-  return adminFetch<ApproveApplicationResponse>(
+export async function approveApplication(id: string, review_notes?: string): Promise<ApproveApplicationResponse> {
+  const wrapped = await adminFetch<{ data: ApproveApplicationResponse }>(
     `/api/admin/pro-applications/${id}/approve`,
     {
       method: "POST",
       body: JSON.stringify({ review_notes: review_notes ?? null }),
     }
   );
+  return wrapped.data;
 }
-
 export function fetchCustomers(params: { q?: string; limit?: number; offset?: number } = {}) {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
