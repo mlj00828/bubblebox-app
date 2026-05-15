@@ -137,6 +137,14 @@ export interface AdminProDetail extends AdminPro {
   }>;
 }
 
+export interface ApproveApplicationResponse {
+  pro_id: string;
+  supabase_user_id: string;
+  email: string;
+  full_name: string;
+  message: string;
+}
+
 export interface PaginatedResponse<K extends string, T> {
   total: number;
   limit: number;
@@ -261,6 +269,18 @@ export function updateApplication(
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+// Approves an application: creates Supabase user, creates pros row, sends invite email.
+// Use this instead of updateApplication({ status: "approved" }) when you want the full flow.
+export function approveApplication(id: string, review_notes?: string) {
+  return adminFetch<ApproveApplicationResponse>(
+    `/api/admin/pro-applications/${id}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ review_notes: review_notes ?? null }),
+    }
+  );
 }
 
 export function fetchCustomers(params: { q?: string; limit?: number; offset?: number } = {}) {
