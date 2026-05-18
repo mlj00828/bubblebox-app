@@ -12,10 +12,11 @@ function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialRole = (searchParams?.get("role") as Role) || "customer";
+  const emailFromUrl = searchParams?.get("email") || "";
 
   const [role, setRole] = useState<Role>(initialRole);
   const [mode, setMode] = useState<Mode>("signin");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailFromUrl);
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -23,6 +24,7 @@ function LoginPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   async function handleEmailAuth(e: React.FormEvent) {
     e.preventDefault();
@@ -51,12 +53,11 @@ function LoginPageInner() {
               last_name: lastName.trim(),
               role: "customer",
             },
-            emailRedirectTo: `${window.location.origin}/account`,
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
         if (signUpError) throw signUpError;
 
-        // If email confirmation is required, user.session will be null
         if (data.session) {
           router.push("/account");
         } else {
@@ -85,11 +86,12 @@ function LoginPageInner() {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/account`,
+          // Route through /auth/callback so role-based redirect happens
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (oauthError) throw oauthError;
-      // OAuth redirects the browser, no further action needed here
+      // OAuth redirects the browser
     } catch (err: any) {
       setError(err?.message || "Couldn't start Google sign-in.");
       setSubmitting(false);
@@ -114,6 +116,48 @@ function LoginPageInner() {
     }
   }
 
+  // Pro sign-in via magic link (one-time email link, no password needed)
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+
+    if (!email.trim()) {
+      setError("Please enter your email.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          // Don't create a new user if they don't exist — pros are created by admin approval
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (otpError) {
+        // Supabase returns a generic error if user doesn't exist (with shouldCreateUser: false)
+        if (otpError.message?.toLowerCase().includes("signups not allowed") ||
+            otpError.message?.toLowerCase().includes("user not found")) {
+          setError(
+            "We couldn't find a cleaner account with that email. Make sure you're using the email from your application, or apply first."
+          );
+        } else {
+          setError(otpError.message || "Couldn't send the sign-in link.");
+        }
+        setSubmitting(false);
+        return;
+      }
+      setMagicLinkSent(true);
+    } catch (err: any) {
+      setError(err?.message || "Couldn't send the sign-in link.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="page">
       {/* Top bar */}
@@ -132,14 +176,14 @@ function LoginPageInner() {
           <div className="role-tabs">
             <div
               className={`role-tab ${role === "customer" ? "active" : ""}`}
-              onClick={() => { setRole("customer"); setError(null); setInfo(null); }}
+              onClick={() => { setRole("customer"); setError(null); setInfo(null); setMagicLinkSent(false); }}
             >
               <div className="icon">👤</div>
               <div>I'm a Customer</div>
             </div>
             <div
               className={`role-tab ${role === "pro" ? "active" : ""}`}
-              onClick={() => { setRole("pro"); setError(null); setInfo(null); }}
+              onClick={() => { setRole("pro"); setError(null); setInfo(null); setMagicLinkSent(false); }}
             >
               <div className="icon">🧹</div>
               <div>I'm a Cleaner</div>
@@ -286,35 +330,93 @@ function LoginPageInner() {
                 </div>
               </>
             ) : (
-              // Pro tab — "coming soon"
+              // Pro tab — magic link sign-in
               <>
-                <div>
-                  <h1 className="form-title">Cleaner sign-in</h1>
-                  <div className="form-sub">Pro accounts are coming soon.</div>
-                </div>
+                {magicLinkSent ? (
+                  <>
+                    <div>
+                      <h1 className="form-title">Check your email</h1>
+                      <div className="form-sub">
+                        We sent a sign-in link to <strong>{email}</strong>
+                      </div>
+                    </div>
+                    <div className="coming-soon-card">
+                      <div style={{ fontSize: 32, marginBottom: 10 }}>📬</div>
+                      <div style={{ fontSize: 15, color: "var(--text-mid, #3B5280)", lineHeight: 1.5 }}>
+                        Click the link in that email to sign in to your cleaner dashboard. The link
+                        expires in 60 minutes. You can close this page.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-social"
+                      onClick={() => { setMagicLinkSent(false); setInfo(null); setError(null); }}
+                    >
+                      Use a different email
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <h1 className="form-title">Cleaner sign-in</h1>
+                      <div className="form-sub">
+                        Sign in to manage your jobs and earnings
+                      </div>
+                    </div>
 
-                <div className="coming-soon-card">
-                  <div style={{ fontSize: 32, marginBottom: 10 }}>🧹</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--blue-dark, #0A2FA8)", marginBottom: 8 }}>
-                    Pro accounts are launching soon
-                  </div>
-                  <div style={{ fontSize: 14, color: "var(--text-mid, #3B5280)", marginBottom: 16, lineHeight: 1.5 }}>
-                    We're building the pro portal where you'll manage jobs, see earnings, and accept bookings. In the meantime, apply to be a BubbleBox cleaner and we'll be in touch.
-                  </div>
-                </div>
+                    <form onSubmit={handleMagicLink} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                      <div className="field">
+                        <label className="field-label">Email</label>
+                        <div className="field-wrap">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="2" y="4" width="20" height="16" rx="2" />
+                            <path d="M2 8l10 7 10-7" />
+                          </svg>
+                          <input
+                            type="email"
+                            className="f-input"
+                            placeholder="you@email.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            autoComplete="email"
+                            required
+                          />
+                        </div>
+                      </div>
 
-                <Link href="/join" style={{ textDecoration: "none" }}>
-                  <button type="button" className="btn-primary" style={{ width: "100%" }}>
-                    🧹 Apply to be a BubbleBox cleaner →
-                  </button>
-                </Link>
+                      <div className="magic-hint">
+                        We'll email you a secure sign-in link — no password needed. Use the same
+                        email you applied with.
+                      </div>
 
-                <div className="signup-cta" style={{ marginTop: 8 }}>
-                  Already applied?{" "}
-                  <a href="mailto:bubbleboxusa@gmail.com" className="cta-link">
-                    Email us for status →
-                  </a>
-                </div>
+                      {error && <div className="error-banner">{error}</div>}
+                      {info && <div className="info-banner">{info}</div>}
+
+                      <button type="submit" className="btn-primary" disabled={submitting}>
+                        {submitting ? "Sending..." : "Email me a sign-in link"}
+                      </button>
+                    </form>
+
+                    <div className="divider">or</div>
+
+                    <button className="btn-social" onClick={handleGoogleSignIn} disabled={submitting} type="button">
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      Continue with Google
+                    </button>
+
+                    <div className="signup-cta">
+                      Not a cleaner yet?{" "}
+                      <Link href="/join" className="cta-link">
+                        Apply to join →
+                      </Link>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -540,6 +642,13 @@ function LoginPageInner() {
           border-radius: 10px;
           font-size: 13px;
           color: #15803d;
+        }
+
+        .magic-hint {
+          font-size: 13px;
+          color: var(--text-light);
+          line-height: 1.5;
+          padding: 0 2px;
         }
 
         .coming-soon-card {
