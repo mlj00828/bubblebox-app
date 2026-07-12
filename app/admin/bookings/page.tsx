@@ -29,6 +29,12 @@ export default function AdminBookingsPage() {
 
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">(initialStatus);
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  // Debounce search so we don't fire an API call per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -38,7 +44,7 @@ export default function AdminBookingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchBookings({ status: statusFilter, q: q || undefined, limit: 100 });
+      const data = await fetchBookings({ status: statusFilter, q: debouncedQ || undefined, limit: 100 });
       setBookings(data.bookings);
       setTotal(data.total);
     } catch (err) {
@@ -48,7 +54,7 @@ export default function AdminBookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, q, router]);
+  }, [statusFilter, debouncedQ, router]);
 
   useEffect(() => { load(); }, [load]);
 
