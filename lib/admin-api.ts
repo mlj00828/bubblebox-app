@@ -339,3 +339,34 @@ export function fmtDateTime(iso: string | null | undefined): string {
     minute: "2-digit",
   });
 }
+
+// ─── Payment actions ───────────────────────────────────────
+// Capture an authorized pre-auth hold (charges the customer). Optionally
+// capture a different amount than authorized (e.g. after a pro adjusts the
+// final total). Omit amount_cents to capture the full authorized amount.
+export interface PaymentActionResult {
+  booking_id: string;
+  payment_status: PaymentStatus;
+  amount_cents?: number;
+  stripe_payment_intent_id?: string | null;
+  message?: string;
+}
+
+export function capturePayment(id: string, amount_cents?: number) {
+  return adminFetch<PaymentActionResult>(`/api/admin/bookings/${id}/capture`, {
+    method: "POST",
+    body: JSON.stringify(amount_cents != null ? { amount_cents } : {}),
+  });
+}
+
+// Refund a captured payment. Omit amount_cents for a full refund; pass it for
+// a partial refund. reason is optional and passed through to Stripe.
+export function refundPayment(
+  id: string,
+  opts: { amount_cents?: number; reason?: string } = {}
+) {
+  return adminFetch<PaymentActionResult>(`/api/admin/bookings/${id}/refund`, {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
