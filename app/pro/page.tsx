@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
-type Tab = "jobs" | "earnings" | "profile";
+type Tab = "offers" | "jobs" | "earnings" | "profile";
 type JobFilter = "upcoming" | "past" | "all";
 type Period = "week" | "month" | "year" | "all";
 
@@ -82,7 +82,45 @@ export default function ProPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("jobs");
+  const [tab, setTab] = useState<Tab>("offers");
+  const [offerCount, setOfferCount] = useState(0);
+
+  // Poll for new offers every 30s while the dashboard is open. When the count
+  // rises, fire a free browser notification (no Twilio needed) and update the
+  // page title so a background tab shows the alert too.
+  useEffect(() => {
+    if (!accessToken) return;
+    let prev = -1; // -1 = first poll, don't notify on initial load
+    let stopped = false;
+
+    async function poll() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/pros/me/offers`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok || stopped) return;
+        const body = await resp.json();
+        const list = Array.isArray(body?.data) ? body.data : body?.data?.offers ?? [];
+        const n = list.length;
+        setOfferCount(n);
+        document.title = n > 0 ? `(${n}) New offers — BubbleBox Pro` : "BubbleBox Pro";
+        if (prev >= 0 && n > prev && typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification("New cleaning offer! 🫧", {
+            body: "A job in your area is up for grabs. First to accept gets it.",
+            icon: "/icons/icon-192.png",
+            tag: "bubblebox-offer",
+          });
+        }
+        prev = n;
+      } catch {
+        // transient network error — next poll will retry
+      }
+    }
+
+    poll();
+    const iv = setInterval(poll, 30_000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, [accessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -270,6 +308,13 @@ export default function ProPage() {
 
       <nav className="tabs">
         <button
+          className={`tab ${tab === "offers" ? "active" : ""}`}
+          onClick={() => setTab("offers")}
+        >
+          Offers
+          {offerCount > 0 && <span className="tab-badge pulse">{offerCount}</span>}
+        </button>
+        <button
           className={`tab ${tab === "jobs" ? "active" : ""}`}
           onClick={() => setTab("jobs")}
         >
@@ -291,6 +336,13 @@ export default function ProPage() {
       </nav>
 
       <main className="shell">
+        {tab === "offers" && (
+          <OffersTab
+            accessToken={accessToken}
+            onCountChange={setOfferCount}
+            onAccepted={() => setTab("jobs")}
+          />
+        )}
         {tab === "jobs" && <JobsTab accessToken={accessToken} />}
         {tab === "earnings" && <EarningsTab accessToken={accessToken} />}
         {tab === "profile" && <ProfileTab pro={pro} email={userEmail} />}
@@ -313,6 +365,257 @@ function Topbar({ onSignOut }: { onSignOut?: () => void }) {
         <button onClick={onSignOut} className="signout-btn">Sign out</button>
       )}
     </header>
+  );
+}
+
+// ── Offers Tab ────────────────────────────────────────────────────
+// Uber-style: open offers are shown to every eligible pro; first to accept
+// wins the job. Polls every 20s while this tab is open.
+interface Offer {
+  id: string;
+  booking_id?: string;
+  status?: string;
+  expires_at?: string | null;
+  created_at?: string;
+  // booking details arrive either flat or nested under `booking`
+  booking?: Partial<Job>;
+  [key: string]: any;
+}
+
+function normalizeOffer(o: Offer): { offer: Offer; job: Partial<Job> } {
+  return { offer: o, job: o.booking ?? (o as Partial<Job>) };
+}
+
+function OffersTab({
+  accessToken,
+  onCountChange,
+  onAccepted,
+}: {
+  accessToken: string;
+  onCountChange: (n: number) => void;
+  onAccepted: () => void;
+}) {
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [notifState, setNotifState] = useState<string>(
+    typeof Notification !== "undefined" ? Notification.permission : "unsupported"
+  );
+
+  async function load(showSpinner = false) {
+    if (showSpinner) setLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/pros/me/offers`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const body = await resp.json();
+      if (!resp.ok) {
+        setError(body?.error?.message || `Couldn't load offers (${resp.status})`);
+      } else {
+        const list: Offer[] = Array.isArray(body.data) ? body.data : body.data?.offers ?? [];
+        setOffers(list);
+        onCountChange(list.length);
+        setError(null);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Couldn't reach the server.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load(true);
+    const iv = setInterval(() => load(false), 20_000);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  async function act(offerId: string, action: "accept" | "decline") {
+    setBusyId(offerId);
+    setNotice(null);
+    try {
+      const resp = await fetch(
+        `${API_BASE}/api/pros/me/offers/${offerId}/${action}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        // 409 = someone else beat them to it — refresh so it disappears
+        if (resp.status === 409 || resp.status === 410) {
+          setNotice("Sorry — another cleaner grabbed that one first. Keep an eye out for the next offer!");
+          await load(false);
+        } else {
+          setNotice(body?.error?.message || `Couldn't ${action} the offer. Try again.`);
+        }
+        return;
+      }
+      if (action === "accept") {
+        setNotice("🎉 Job is yours! It's now in your Jobs tab.");
+        await load(false);
+        setTimeout(onAccepted, 900);
+      } else {
+        setOffers((prev) => {
+          const next = prev.filter((o) => o.id !== offerId);
+          onCountChange(next.length);
+          return next;
+        });
+      }
+    } catch (e: any) {
+      setNotice(e?.message || "Network error — try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function enableNotifications() {
+    if (typeof Notification === "undefined") return;
+    Notification.requestPermission().then(setNotifState);
+  }
+
+  return (
+    <div>
+      {notifState === "default" && (
+        <button className="notif-banner" onClick={enableNotifications}>
+          🔔 Turn on notifications to get alerted the moment a new job drops — tap here
+        </button>
+      )}
+      {notifState === "denied" && (
+        <div className="notif-banner muted">
+          🔕 Notifications are blocked in your browser settings. Keep this page open — it checks for new offers every 30 seconds.
+        </div>
+      )}
+
+      {notice && <div className="offer-notice">{notice}</div>}
+
+      {loading ? (
+        <div className="loading">Checking for offers…</div>
+      ) : error ? (
+        <div className="error-card">
+          <div className="error-icon">⚠️</div>
+          <div className="error-title">Couldn&apos;t load offers</div>
+          <div className="error-sub">{error}</div>
+        </div>
+      ) : offers.length === 0 ? (
+        <div className="empty-card">
+          <div className="empty-icon">📡</div>
+          <div className="empty-title">No open offers right now</div>
+          <div className="empty-sub">
+            New jobs in your ZIP codes will appear here the moment a customer books.
+            This page refreshes automatically — first cleaner to accept gets the job.
+          </div>
+        </div>
+      ) : (
+        <div className="bookings-list">
+          {offers.map((o) => (
+            <OfferCard
+              key={o.id}
+              offer={o}
+              busy={busyId === o.id}
+              onAccept={() => act(o.id, "accept")}
+              onDecline={() => act(o.id, "decline")}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfferCard({
+  offer,
+  busy,
+  onAccept,
+  onDecline,
+}: {
+  offer: Offer;
+  busy: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const { job: j } = normalizeOffer(offer);
+  const [now, setNow] = useState(() => Date.now());
+
+  // live countdown if the offer expires
+  useEffect(() => {
+    if (!offer.expires_at) return;
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, [offer.expires_at]);
+
+  const date = j.preferred_date
+    ? new Date(j.preferred_date + "T12:00:00").toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })
+    : "Date TBD";
+  const total = j.final_total_cents ?? j.estimated_total_cents ?? 0;
+
+  let countdown: string | null = null;
+  let expired = false;
+  if (offer.expires_at) {
+    const ms = new Date(offer.expires_at).getTime() - now;
+    if (ms <= 0) {
+      expired = true;
+    } else {
+      const m = Math.floor(ms / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      countdown = m > 0 ? `${m}m ${s}s` : `${s}s`;
+    }
+  }
+
+  return (
+    <div className="booking-card offer-card">
+      <div className="booking-head">
+        <div className="booking-svc">
+          <span className="booking-icon">{j.service_icon || "🫧"}</span>
+          <div>
+            <div className="booking-name">{j.service_name || "Cleaning"}</div>
+            <div className="booking-id">
+              {j.zip ? `ZIP ${j.zip}` : ""}
+              {countdown ? ` · ⏱ ${countdown} left` : ""}
+            </div>
+          </div>
+        </div>
+        <span className="offer-pay">${Math.round(total / 100)}</span>
+      </div>
+
+      <dl className="booking-rows">
+        <Row label="Date" value={date} />
+        <Row label="Window" value={j.preferred_window || "—"} />
+        <Row label="Area" value={j.zip ? `ZIP ${j.zip}` : "—"} />
+        {j.notes && <Row label="Notes" value={j.notes} />}
+      </dl>
+
+      <div className="offer-actions">
+        <button
+          className="btn-decline"
+          onClick={onDecline}
+          disabled={busy || expired}
+        >
+          Pass
+        </button>
+        <button
+          className="btn-accept"
+          onClick={onAccept}
+          disabled={busy || expired}
+        >
+          {expired ? "Expired" : busy ? "Working…" : "Accept job ✓"}
+        </button>
+      </div>
+      <div className="offer-fine">
+        Exact address and customer contact are shared after you accept.
+      </div>
+    </div>
   );
 }
 
@@ -630,6 +933,52 @@ function ProfileRow({ label, value }: { label: string; value: React.ReactNode })
 function PageStyles() {
   return (
     <style jsx global>{`
+      /* ── Offers ─────────────────────────────── */
+      .offer-card { border: 2px solid var(--blue); }
+      .offer-pay {
+        font-size: 22px; font-weight: 800; color: var(--blue);
+        white-space: nowrap;
+      }
+      .offer-actions {
+        display: flex; gap: 10px; margin-top: 14px;
+      }
+      .btn-accept {
+        flex: 2; padding: 13px; border: none; border-radius: 12px;
+        background: linear-gradient(135deg, #16a34a, #15803d);
+        color: white; font-size: 15px; font-weight: 800;
+        cursor: pointer; font-family: inherit;
+      }
+      .btn-decline {
+        flex: 1; padding: 13px; border-radius: 12px;
+        border: 1.5px solid #d1d5db; background: white;
+        color: #6b7280; font-size: 15px; font-weight: 700;
+        cursor: pointer; font-family: inherit;
+      }
+      .btn-accept:disabled, .btn-decline:disabled { opacity: 0.5; cursor: default; }
+      .offer-fine {
+        margin-top: 10px; font-size: 11px; color: #9ca3af; text-align: center;
+      }
+      .offer-notice {
+        background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+        border-radius: 12px; padding: 12px 16px; font-size: 14px;
+        font-weight: 600; margin-bottom: 14px;
+      }
+      .notif-banner {
+        display: block; width: 100%; text-align: left;
+        background: #fefce8; border: 1px solid #fde047; color: #854d0e;
+        border-radius: 12px; padding: 12px 16px; font-size: 13px;
+        font-weight: 600; margin-bottom: 14px; cursor: pointer;
+        font-family: inherit;
+      }
+      .notif-banner.muted {
+        background: #f9fafb; border-color: #e5e7eb; color: #6b7280;
+        cursor: default;
+      }
+      .tab-badge.pulse { animation: bbPulse 2s ease-in-out infinite; }
+      @keyframes bbPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.18); }
+      }
       :root {
         --blue: #1D7FE8;
         --blue-dark: #0A2FA8;
