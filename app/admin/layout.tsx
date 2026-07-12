@@ -10,6 +10,7 @@ import "./admin.css";
 const NAV = [
   { href: "/admin", label: "Dashboard", pane: "dashboard" },
   { href: "/admin/bookings", label: "Bookings", pane: "bookings" },
+  { href: "/admin/payments", label: "Payments", pane: "payments" },
   { href: "/admin/applications", label: "Applications", pane: "applications" },
   { href: "/admin/customers", label: "Customers", pane: "customers" },
   { href: "/admin/pros", label: "Pros", pane: "pros" },
@@ -31,6 +32,13 @@ function Icon({ name }: { name: string }) {
       <svg {...props}>
         <rect x="3" y="4" width="18" height="18" rx="2" />
         <path d="M16 2v4M8 2v4M3 10h18" />
+      </svg>
+    );
+  if (name === "payments")
+    return (
+      <svg {...props}>
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M2 10h20" />
       </svg>
     );
   if (name === "applications")
