@@ -83,6 +83,34 @@ const FREQUENCIES = [
 
 const TIME_SLOTS = ["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM"];
 
+// Minimum notice before a slot can start — gives a cleaner time to accept
+// the job and travel there.
+const MIN_LEAD_MINUTES = 120;
+
+function slotHour24(t: string): number {
+  const [time, mer] = t.split(" ");
+  let h = parseInt(time.split(":")[0], 10);
+  if (mer === "PM" && h !== 12) h += 12;
+  if (mer === "AM" && h === 12) h = 0;
+  return h;
+}
+
+function todayStr(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
+}
+
+// A slot is bookable if the date is in the future, or (today) its start time
+// is at least MIN_LEAD_MINUTES from now.
+function isSlotAvailable(dateStr: string, slot: string): boolean {
+  if (!dateStr) return true;
+  if (dateStr > todayStr()) return true;
+  if (dateStr < todayStr()) return false;
+  const now = new Date();
+  const earliest = now.getHours() * 60 + now.getMinutes() + MIN_LEAD_MINUTES;
+  return slotHour24(slot) * 60 >= earliest;
+}
+
 const STEP_NAMES = ["Choose Service","Home Size","Add-Ons","Frequency","Date & Time","Your Address","Contact Info","Payment","Review & Confirm"];
 
 function defaultState(): BookingState {
@@ -146,7 +174,7 @@ function BookPageInner() {
     switch (step) {
       case 8: return state.payConfirmed;
       case 1: return !!state.service;
-      case 5: return !!state.date && !!state.time;
+      case 5: return !!state.date && !!state.time && isSlotAvailable(state.date, state.time);
       case 6: return state.address.trim().length >= 5 && state.zip.length === 5;
       case 7: return state.firstName.trim().length >= 1 && state.lastName.trim().length >= 1 && state.email.includes("@") && toE164USPhone(state.phone) !== null;
       default: return true;
@@ -470,7 +498,7 @@ function Step5({ state, update, calYear, calMonth, setCalYear, setCalMonth }: an
             const isSel = state.date === dateStr;
             const isToday = date.getTime() === today.getTime();
             return (
-              <div key={d} onClick={() => !isPast && update({ date: dateStr })} style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: isPast ? "not-allowed" : "pointer", borderRadius: "50%", margin: 3, fontWeight: 500, background: isSel ? "var(--color-accent)" : "transparent", color: isPast ? "var(--color-rule)" : isSel ? "white" : "var(--color-ink)", border: isToday && !isSel ? "2px solid var(--color-accent-light)" : "2px solid transparent", boxShadow: isSel ? "0 2px 8px rgba(29,127,232,0.4)" : "none", transition: "all 0.15s" }}>
+              <div key={d} onClick={() => !isPast && update({ date: dateStr, ...(state.time && !isSlotAvailable(dateStr, state.time) ? { time: "" } : {}) })} style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: isPast ? "not-allowed" : "pointer", borderRadius: "50%", margin: 3, fontWeight: 500, background: isSel ? "var(--color-accent)" : "transparent", color: isPast ? "var(--color-rule)" : isSel ? "white" : "var(--color-ink)", border: isToday && !isSel ? "2px solid var(--color-accent-light)" : "2px solid transparent", boxShadow: isSel ? "0 2px 8px rgba(29,127,232,0.4)" : "none", transition: "all 0.15s" }}>
                 {d}
               </div>
             );
@@ -480,11 +508,17 @@ function Step5({ state, update, calYear, calMonth, setCalYear, setCalMonth }: an
 
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)", marginBottom: 10 }}>Available arrival windows:</div>
+        {state.date === todayStr() && !TIME_SLOTS.some(t => isSlotAvailable(state.date, t)) && (
+          <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "var(--color-accent-mid)", fontWeight: 500, marginBottom: 10 }}>
+            Same-day booking is closed for today — cleaners need at least 2 hours&apos; notice. Pick tomorrow or later!
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
           {TIME_SLOTS.map(t => {
             const sel = state.time === t;
+            const avail = isSlotAvailable(state.date, t);
             return (
-              <div key={t} onClick={() => update({ time: t })} style={{ background: sel ? "var(--color-accent)" : "white", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: "10px 6px", textAlign: "center", cursor: "pointer", fontSize: 13, fontWeight: 600, color: sel ? "white" : "var(--color-ink)", transition: "all 0.15s" }}>
+              <div key={t} onClick={() => avail && update({ time: t })} style={{ background: !avail ? "var(--color-surface)" : sel ? "var(--color-accent)" : "white", border: `2px solid ${sel && avail ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: "10px 6px", textAlign: "center", cursor: avail ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 600, color: !avail ? "var(--color-rule)" : sel ? "white" : "var(--color-ink)", textDecoration: !avail ? "line-through" : "none", transition: "all 0.15s" }}>
                 {t}
               </div>
             );
