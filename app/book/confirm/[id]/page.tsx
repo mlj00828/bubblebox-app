@@ -13,6 +13,7 @@ export default function ConfirmPage() {
   const [booking, setBooking] = useState<BookingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,6 +23,7 @@ export default function ConfirmPage() {
     } catch {
       // Storage unavailable
     }
+    setPhone(phone);
 
     if (!phone) {
       setError(
@@ -125,8 +127,8 @@ export default function ConfirmPage() {
               <Row label="Where" value={booking.address_line} />
               <Row label="Customer" value={booking.customer_name} />
               <Row label="Phone" value={formatPhoneForDisplay(booking.customer_phone)} />
-              <Row label="Status" value={statusLabel(booking.status)} />
             </dl>
+            {phone && <StatusTracker id={booking.id} phone={phone} initialStatus={booking.status} />}
           </div>
         )}
 
@@ -150,6 +152,125 @@ export default function ConfirmPage() {
 
       <Footer />
     </>
+  );
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
+
+const TRACK_STEPS = [
+  { key: "broadcasting", label: "Finding your cleaner", icon: "📡" },
+  { key: "confirmed", label: "Cleaner assigned", icon: "🙋" },
+  { key: "enroute", label: "On the way", icon: "🚗" },
+  { key: "in_progress", label: "Cleaning in progress", icon: "🧽" },
+  { key: "completed", label: "Sparkling clean!", icon: "✨" },
+];
+const STATUS_ORDER = ["requested", "broadcasting", "confirmed", "enroute", "in_progress", "completed"];
+
+function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string; initialStatus: string }) {
+  const [status, setStatus] = useState(initialStatus);
+  const [pro, setPro] = useState<{ first_name: string | null; avg_rating: number | null } | null>(null);
+
+  useEffect(() => {
+    if (status === "completed" || status === "cancelled") return;
+    let stopped = false;
+    async function poll() {
+      try {
+        const r = await fetch(`${API_BASE}/api/bookings/${id}/track?phone=${encodeURIComponent(phone)}`);
+        if (!r.ok || stopped) return;
+        const j = await r.json();
+        if (j?.data?.status) setStatus(j.data.status);
+        if (j?.data?.pro) setPro(j.data.pro);
+      } catch {
+        // transient — next poll retries
+      }
+    }
+    poll();
+    const iv = setInterval(poll, 15_000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, [id, phone, status]);
+
+  if (status === "cancelled") {
+    return (
+      <div className="px-5 py-4 text-sm font-semibold" style={{ color: "var(--color-danger)" }}>
+        This booking was cancelled.
+      </div>
+    );
+  }
+
+  const currentIdx = STATUS_ORDER.indexOf(status);
+
+  return (
+    <div className="px-5 py-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
+      <div className="mb-4 text-sm font-bold" style={{ color: "var(--color-ink)" }}>
+        Live status
+        <span className="ml-2 text-xs font-medium" style={{ color: "var(--color-muted)" }}>
+          updates automatically
+        </span>
+      </div>
+      {pro?.first_name && (
+        <div
+          className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3"
+          style={{ background: "var(--color-surface)" }}
+        >
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white"
+            style={{ background: "var(--color-accent)" }}
+          >
+            {pro.first_name[0]}
+          </div>
+          <div>
+            <div className="text-sm font-bold">{pro.first_name} is your cleaner</div>
+            {pro.avg_rating ? (
+              <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+                ★ {Number(pro.avg_rating).toFixed(1)} rating
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+      <div>
+        {TRACK_STEPS.map((step) => {
+          const stepIdx = STATUS_ORDER.indexOf(step.key);
+          const done = currentIdx > stepIdx;
+          const active = currentIdx === stepIdx || (step.key === "broadcasting" && status === "requested");
+          return (
+            <div key={step.key} className="flex items-center gap-3 py-2">
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-full text-sm"
+                style={{
+                  background: done ? "var(--color-success)" : active ? "var(--color-accent)" : "var(--color-surface)",
+                  color: done || active ? "white" : "var(--color-muted)",
+                  transition: "all 0.3s",
+                }}
+              >
+                {done ? "✓" : step.icon}
+              </div>
+              <div
+                className="text-sm"
+                style={{
+                  fontWeight: active ? 700 : 500,
+                  color: done || active ? "var(--color-ink)" : "var(--color-muted)",
+                }}
+              >
+                {step.label}
+                {active && status !== "completed" && (
+                  <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-accent)" }} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {status === "completed" && (
+        <Link
+          href={`/review/${id}`}
+          className="mt-4 block rounded-full py-3 text-center font-bold text-white no-underline"
+          style={{ background: "var(--color-accent)" }}
+        >
+          ⭐ Rate your clean
+        </Link>
+      )}
+    </div>
   );
 }
 
