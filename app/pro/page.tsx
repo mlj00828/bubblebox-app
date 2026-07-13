@@ -689,14 +689,65 @@ function JobsTab({ accessToken }: { accessToken: string }) {
         </div>
       ) : (
         <div className="bookings-list">
-          {jobs.map((j) => <JobCard key={j.id} job={j} />)}
+          {jobs.map((j) => (
+            <JobCard
+              key={j.id}
+              job={j}
+              accessToken={accessToken}
+              onStatusChange={(id, status) =>
+                setJobs((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)))
+              }
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function JobCard({ job: j }: { job: Job }) {
+function JobCard({
+  job: j,
+  accessToken,
+  onStatusChange,
+}: {
+  job: Job;
+  accessToken: string;
+  onStatusChange: (id: string, status: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [captureNote, setCaptureNote] = useState<string | null>(null);
+
+  async function setStatus(next: "enroute" | "in_progress" | "completed") {
+    if (next === "completed" && !window.confirm("Mark this job complete? This charges the customer's card for the amount on the booking.")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const resp = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/status`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setErr(body?.error?.message || "Couldn't update — try again.");
+      } else {
+        onStatusChange(j.id, next);
+        if (next === "completed") {
+          setCaptureNote(
+            body?.data?.capture?.captured
+              ? `✓ Job complete — $${((body.data.capture.amount_cents ?? 0) / 100).toFixed(2)} charged to the customer.`
+              : "✓ Job complete. Payment will be settled by BubbleBox."
+          );
+        }
+      }
+    } catch {
+      setErr("Network error — try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const date = j.preferred_date
     ? new Date(j.preferred_date + "T12:00:00").toLocaleDateString("en-US", {
         weekday: "long",
@@ -749,6 +800,38 @@ function JobCard({ job: j }: { job: Job }) {
         {j.notes && <Row label="Notes" value={j.notes} />}
         <Row label="Total" value={<strong>${totalDollars}</strong>} />
       </dl>
+
+      {["confirmed", "enroute", "in_progress"].includes(j.status) && (
+        <div className="job-actions">
+          {j.address_line && (j.status === "confirmed" || j.status === "enroute") && (
+            <a
+              className="btn-nav"
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(j.address_line + (j.zip ? " " + j.zip : ""))}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              🧭 Navigate
+            </a>
+          )}
+          {j.status === "confirmed" && (
+            <button className="btn-accept" disabled={busy} onClick={() => setStatus("enroute")}>
+              {busy ? "…" : "🚗 On my way"}
+            </button>
+          )}
+          {j.status === "enroute" && (
+            <button className="btn-accept" disabled={busy} onClick={() => setStatus("in_progress")}>
+              {busy ? "…" : "▶ Start job"}
+            </button>
+          )}
+          {j.status === "in_progress" && (
+            <button className="btn-accept" disabled={busy} onClick={() => setStatus("completed")}>
+              {busy ? "…" : "✓ Complete job"}
+            </button>
+          )}
+        </div>
+      )}
+      {err && <div className="job-err">{err}</div>}
+      {captureNote && <div className="job-done">{captureNote}</div>}
     </div>
   );
 }
@@ -933,6 +1016,23 @@ function ProfileRow({ label, value }: { label: string; value: React.ReactNode })
 function PageStyles() {
   return (
     <style jsx global>{`
+      /* ── Job-day actions ────────────────────── */
+      .job-actions { display: flex; gap: 10px; margin-top: 14px; }
+      .btn-nav {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        padding: 13px; border-radius: 12px; border: 1.5px solid var(--blue);
+        color: var(--blue); background: white; font-size: 14px; font-weight: 700;
+        text-decoration: none;
+      }
+      .job-actions .btn-accept { flex: 2; }
+      .job-err {
+        margin-top: 10px; font-size: 13px; color: #b91c1c;
+        background: #fef2f2; border-radius: 8px; padding: 8px 12px;
+      }
+      .job-done {
+        margin-top: 10px; font-size: 13px; color: #15803d; font-weight: 600;
+        background: #f0fdf4; border-radius: 8px; padding: 8px 12px;
+      }
       /* ── Offers ─────────────────────────────── */
       .offer-card { border: 2px solid var(--blue); }
       .offer-pay {
