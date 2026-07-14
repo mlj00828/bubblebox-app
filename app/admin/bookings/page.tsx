@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  assignBooking,
+  fetchPros,
   fetchBookings,
   fetchBooking,
   updateBooking,
@@ -205,6 +207,15 @@ function BookingModal({
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
+          {["requested", "broadcasting"].includes(booking.status) && (
+            <AssignSection
+              bookingId={booking.id}
+              onAssigned={(proName) => {
+                alert(`Booking assigned to ${proName}`);
+                window.location.reload();
+              }}
+            />
+          )}
           <div className="detail-grid">
             <div className="detail-row">
               <div className="detail-label">Customer</div>
@@ -290,6 +301,73 @@ function BookingModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ─── Manual dispatch: assign an open booking to a pro ─────────────
+function AssignSection({
+  bookingId,
+  onAssigned,
+}: {
+  bookingId: string;
+  onAssigned: (proName: string) => void;
+}) {
+  const [pros, setPros] = useState<Array<{ id: string; full_name: string }>>([]);
+  const [proId, setProId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchPros({ status: "approved", limit: 100 })
+      .then((d: any) => setPros((d.pros ?? d ?? []).map((p: any) => ({ id: p.id, full_name: p.full_name }))))
+      .catch(() => setErr("Couldn't load pros"));
+  }, []);
+
+  async function assign() {
+    if (!proId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await assignBooking(bookingId, proId);
+      onAssigned(r.pro_name);
+    } catch (e: any) {
+      setErr(e?.message || "Assignment failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: "#eff6ff",
+        border: "1px solid #bfdbfe",
+        borderRadius: 12,
+        padding: "12px 14px",
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#1e40af", marginBottom: 8 }}>
+        No cleaner has accepted yet — assign one manually:
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <select
+          className="f-input"
+          value={proId}
+          onChange={(e) => setProId(e.target.value)}
+          style={{ flex: 1 }}
+        >
+          <option value="">Select a pro…</option>
+          {pros.map((p) => (
+            <option key={p.id} value={p.id}>{p.full_name}</option>
+          ))}
+        </select>
+        <button className="btn btn-green" onClick={assign} disabled={!proId || busy}>
+          {busy ? "Assigning…" : "Assign"}
+        </button>
+      </div>
+      {err && <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c" }}>{err}</div>}
     </div>
   );
 }
