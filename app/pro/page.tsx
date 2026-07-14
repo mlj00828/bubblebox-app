@@ -303,7 +303,7 @@ export default function ProPage() {
               </div>
               <div className="hero-stat">
                 <div className="hero-stat-value">
-                  ${Math.round(activity.lifetime_earnings_cents / 100).toLocaleString()}
+                  ${Math.round((activity.lifetime_earnings_cents * PRO_SHARE) / 100).toLocaleString()}
                 </div>
                 <div className="hero-stat-label">Earned</div>
               </div>
@@ -923,23 +923,23 @@ function EarningsTab({ accessToken }: { accessToken: string }) {
           <div className="earnings-label">
             {period === "week" ? "This week" : period === "month" ? "This month" : period === "year" ? "This year" : "Lifetime"}
           </div>
-          <div className="earnings-value">${Math.round(data.period_totals.gross_cents / 100).toLocaleString()}</div>
-          <div className="earnings-sub">{data.period_totals.jobs} {data.period_totals.jobs === 1 ? "job" : "jobs"} completed</div>
+          <div className="earnings-value">${Math.round((data.period_totals.gross_cents * PRO_SHARE) / 100).toLocaleString()}</div>
+          <div className="earnings-sub">{data.period_totals.jobs} {data.period_totals.jobs === 1 ? "job" : "jobs"} completed · take-home</div>
         </div>
         <div className="earnings-card">
           <div className="earnings-label">Pending</div>
-          <div className="earnings-value">${Math.round(data.pending.gross_cents / 100).toLocaleString()}</div>
-          <div className="earnings-sub">{data.pending.jobs} {data.pending.jobs === 1 ? "job" : "jobs"} scheduled</div>
+          <div className="earnings-value">${Math.round((data.pending.gross_cents * PRO_SHARE) / 100).toLocaleString()}</div>
+          <div className="earnings-sub">{data.pending.jobs} {data.pending.jobs === 1 ? "job" : "jobs"} scheduled · take-home</div>
         </div>
         <div className="earnings-card">
           <div className="earnings-label">Lifetime</div>
-          <div className="earnings-value">${Math.round(data.lifetime_totals.gross_cents / 100).toLocaleString()}</div>
+          <div className="earnings-value">${Math.round((data.lifetime_totals.gross_cents * PRO_SHARE) / 100).toLocaleString()}</div>
           <div className="earnings-sub">{data.lifetime_totals.jobs} total {data.lifetime_totals.jobs === 1 ? "job" : "jobs"}</div>
         </div>
       </div>
 
       <div className="earnings-disclaimer">
-        Amounts shown are gross totals (what the customer paid). Once payouts are set up, you'll see your earnings after platform fees.
+        All amounts are your take-home earnings (80% of what the customer pays — BubbleBox's service fee is 20%). Payouts are sent directly to you after each completed job.
       </div>
 
       <h3 className="section-title">Recent completed jobs</h3>
@@ -962,7 +962,7 @@ function EarningsTab({ accessToken }: { accessToken: string }) {
                   {r.customer_name || "Customer"}
                 </div>
               </div>
-              <div className="completion-amount">${Math.round(r.amount_cents / 100).toLocaleString()}</div>
+              <div className="completion-amount">${Math.round((r.amount_cents * PRO_SHARE) / 100).toLocaleString()}</div>
             </div>
           ))}
         </div>
