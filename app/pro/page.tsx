@@ -8,6 +8,12 @@ import { supabase } from "@/lib/supabase";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
 type Tab = "offers" | "jobs" | "earnings" | "profile";
+
+// Pros keep 80% of every job; BubbleBox's service fee is 20%.
+const PRO_SHARE = 0.8;
+function payoutDollars(totalCents: number): string {
+  return (Math.round(totalCents * PRO_SHARE) / 100).toFixed(2);
+}
 type JobFilter = "upcoming" | "past" | "all";
 type Period = "week" | "month" | "year" | "all";
 
@@ -586,7 +592,10 @@ function OfferCard({
             </div>
           </div>
         </div>
-        <span className="offer-pay">${Math.round(total / 100)}</span>
+        <div style={{ textAlign: "right" }}>
+          <span className="offer-pay">${payoutDollars(total)}</span>
+          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600 }}>your payout</div>
+        </div>
       </div>
 
       <dl className="booking-rows">
@@ -613,6 +622,7 @@ function OfferCard({
         </button>
       </div>
       <div className="offer-fine">
+        Customer pays ${Math.round(total / 100)} · your payout is 80% (BubbleBox service fee: 20%).
         Exact address and customer contact are shared after you accept.
       </div>
     </div>
@@ -798,7 +808,8 @@ function JobCard({
         )}
         <Row label="Address" value={j.address_line || `ZIP ${j.zip}`} />
         {j.notes && <Row label="Notes" value={j.notes} />}
-        <Row label="Total" value={<strong>${totalDollars}</strong>} />
+        <Row label="Customer pays" value={`$${totalDollars}`} />
+        <Row label="Your payout (80%)" value={<strong style={{ color: "#15803d" }}>${payoutDollars(total)}</strong>} />
       </dl>
 
       {["confirmed", "enroute", "in_progress"].includes(j.status) && (
