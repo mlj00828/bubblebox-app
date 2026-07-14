@@ -92,7 +92,9 @@ export async function fetchBooking(
   customerPhone: string
 ): Promise<BookingResponse | null> {
   const url = new URL(`${API_BASE}/api/bookings/${id}`);
-  url.searchParams.set("phone", customerPhone);
+  // The API matches on bare 10-digit US numbers; normalize whatever format
+  // we're holding (E.164, formatted, digits) down to that.
+  url.searchParams.set("phone", customerPhone.replace(/\D/g, "").slice(-10));
 
   const res = await fetch(url.toString(), {
     headers: { "Content-Type": "application/json" },
