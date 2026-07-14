@@ -370,3 +370,11 @@ export function refundPayment(
     body: JSON.stringify(opts),
   });
 }
+
+// Manually assign an open booking to an approved pro (dispatch override).
+export function assignBooking(id: string, pro_id: string) {
+  return adminFetch<{ booking_id: string; status: BookingStatus; pro_id: string; pro_name: string }>(
+    `/api/admin/bookings/${id}/assign`,
+    { method: "POST", body: JSON.stringify({ pro_id }) }
+  );
+}
