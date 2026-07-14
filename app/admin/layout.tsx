@@ -133,7 +133,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span className="dot" /> API online · api.homeproatl.xyz
             </div>
             <div className="side-status" style={{ color: "var(--orange-dark)" }}>
-              <span className="dot" style={{ background: "var(--orange)" }} /> Stripe: TEST mode
+              <span className="dot" style={{ background: (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "").startsWith("pk_live") ? "var(--green)" : "var(--orange)" }} />{" "}
+              Stripe: {(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "").startsWith("pk_live") ? "LIVE" : "TEST mode"}
             </div>
             <button onClick={handleSignout} className="signout-btn" style={{ width: "100%", textAlign: "left", marginTop: 8 }}>
               Sign out
