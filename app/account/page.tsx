@@ -246,6 +246,7 @@ export default function AccountPage() {
         {tab === "upcoming" && (
           <BookingsList
             bookings={upcoming}
+            customerPhone={customer?.phone}
             emptyTitle="No upcoming cleanings"
             emptySub="Book your next cleaning to see it here."
             showCta
@@ -254,6 +255,7 @@ export default function AccountPage() {
         {tab === "past" && (
           <BookingsList
             bookings={past}
+            customerPhone={customer?.phone}
             emptyTitle="No past cleanings yet"
             emptySub="Once a cleaning is completed, it'll show up here."
           />
@@ -274,11 +276,13 @@ export default function AccountPage() {
 // ── Bookings list ─────────────────────────────────────────────────
 function BookingsList({
   bookings,
+  customerPhone,
   emptyTitle,
   emptySub,
   showCta = false,
 }: {
   bookings: Booking[];
+  customerPhone?: string | null;
   emptyTitle: string;
   emptySub: string;
   showCta?: boolean;
@@ -300,13 +304,30 @@ function BookingsList({
   return (
     <div className="bookings-list">
       {bookings.map((b) => (
-        <BookingCard key={b.id} booking={b} />
+        <BookingCard key={b.id} booking={b} customerPhone={customerPhone} />
       ))}
     </div>
   );
 }
 
-function BookingCard({ booking: b }: { booking: Booking }) {
+function BookingCard({
+  booking: b,
+  customerPhone,
+}: {
+  booking: Booking;
+  customerPhone?: string | null;
+}) {
+  // Remember the phone for this booking so the tracker/review pages open
+  // instantly without re-asking.
+  function rememberPhone() {
+    if (!customerPhone) return;
+    try {
+      sessionStorage.setItem(`booking-phone-${b.id}`, customerPhone);
+    } catch {
+      // storage unavailable — pages will ask instead
+    }
+  }
+
   const date = b.preferred_date
     ? new Date(b.preferred_date + "T12:00:00").toLocaleDateString("en-US", {
         weekday: "long",
@@ -357,6 +378,26 @@ function BookingCard({ booking: b }: { booking: Booking }) {
         )}
         <Row label="Total" value={<strong>${totalDollars}</strong>} />
       </dl>
+
+      {["broadcasting", "confirmed", "enroute", "in_progress"].includes(b.status) && (
+        <Link
+          href={`/book/confirm/${b.id}`}
+          onClick={rememberPhone}
+          className="btn-primary"
+          style={{ display: "block", textAlign: "center", marginTop: 14, textDecoration: "none" }}
+        >
+          Track live status →
+        </Link>
+      )}
+      {b.status === "completed" && (
+        <Link
+          href={`/review/${b.id}`}
+          onClick={rememberPhone}
+          style={{ display: "block", textAlign: "center", marginTop: 14, padding: "12px", borderRadius: 50, border: "1.5px solid var(--color-accent)", color: "var(--color-accent)", fontWeight: 700, fontSize: 14, textDecoration: "none" }}
+        >
+          ⭐ Rate this clean
+        </Link>
+      )}
     </div>
   );
 }
