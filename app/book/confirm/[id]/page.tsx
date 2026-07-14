@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "@/components/Chrome";
-import { fetchBooking, type BookingResponse, formatPhoneForDisplay } from "@/lib/api";
+import { fetchBooking, type BookingResponse, formatPhoneForDisplay, toE164USPhone } from "@/lib/api";
 import { formatPrice } from "@/lib/services";
 
 export default function ConfirmPage() {
@@ -14,6 +14,8 @@ export default function ConfirmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
+  const [needsPhone, setNeedsPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -26,9 +28,7 @@ export default function ConfirmPage() {
     setPhone(phone);
 
     if (!phone) {
-      setError(
-        "We can't show your booking details on this device. Check your text messages — your pro will be in touch shortly."
-      );
+      setNeedsPhone(true);
       setLoading(false);
       return;
     }
@@ -37,14 +37,14 @@ export default function ConfirmPage() {
       .then((b) => {
         if (cancelled) return;
         if (!b) {
-          setError("We couldn't find that booking. Check your text messages for confirmation.");
+          setError("We couldn't find a booking matching that phone number.");
         } else {
           setBooking(b);
         }
       })
       .catch(() => {
         if (cancelled) return;
-        setError("Couldn't reach the server. Check your text messages instead.");
+        setError("Couldn't reach the server — please try again in a moment.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -71,7 +71,7 @@ export default function ConfirmPage() {
             Booking received
           </h1>
           <p className="mt-3 text-lg" style={{ color: "var(--color-muted)" }}>
-            We&apos;re matching you with a pro. You&apos;ll get a text shortly.
+            We&apos;re matching you with a cleaner — track it live below.
           </p>
         </div>
 
@@ -79,6 +79,47 @@ export default function ConfirmPage() {
           <div className="mt-10 text-center text-sm" style={{ color: "var(--color-muted)" }}>
             Loading booking details...
           </div>
+        )}
+
+        {needsPhone && !booking && (
+          <form
+            className="mt-10 rounded-2xl p-6"
+            style={{ background: "white", border: "1.5px solid var(--color-rule)" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const e164 = toE164USPhone(phoneInput);
+              if (!e164) {
+                setError("Enter a valid 10-digit US phone number.");
+                return;
+              }
+              try {
+                sessionStorage.setItem(`booking-phone-${id}`, e164);
+              } catch {
+                // storage unavailable
+              }
+              window.location.reload();
+            }}
+          >
+            <div className="mb-1 text-base font-bold">Confirm your phone number</div>
+            <p className="mb-4 text-sm" style={{ color: "var(--color-muted)" }}>
+              Enter the number you booked with to see your booking and live status.
+            </p>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              placeholder="(404) 555-0199"
+              style={{ width: "100%", padding: "14px 16px", border: "1.5px solid var(--color-surface-mid)", borderRadius: 12, fontSize: 16, fontFamily: "inherit", outline: "none" }}
+            />
+            <button
+              type="submit"
+              style={{ marginTop: 14, width: "100%", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              View my booking
+            </button>
+          </form>
         )}
 
         {error && (
