@@ -44,7 +44,10 @@ function LoginPageInner() {
           setSubmitting(false);
           return;
         }
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const timeout = new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error("This is taking longer than expected — please check your connection and try again.")), 20000)
+        );
+        const { data, error: signUpError } = await Promise.race([supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
@@ -55,7 +58,7 @@ function LoginPageInner() {
             },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
-        });
+        }), timeout]);
         if (signUpError) throw signUpError;
 
         if (data.session) {
@@ -142,7 +145,7 @@ function LoginPageInner() {
         if (otpError.message?.toLowerCase().includes("signups not allowed") ||
             otpError.message?.toLowerCase().includes("user not found")) {
           setError(
-            "We couldn't find a cleaner account with that email. Make sure you're using the email from your application, or apply first."
+            "We couldn't find a Pro account with that email. Make sure you're using the email from your application, or apply first."
           );
         } else {
           setError(otpError.message || "Couldn't send the sign-in link.");
@@ -163,6 +166,8 @@ function LoginPageInner() {
       {/* Top bar */}
       <div className="topbar">
         <Link href="/" className="topbar-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="BubbleBox" width={38} height={38} style={{ borderRadius: 8 }} />
           <div className="logo-text">
             <div className="topbar-name">BubbleBox ATL</div>
             <div className="topbar-sub">Atlanta's #1 Cleaning</div>
@@ -186,7 +191,7 @@ function LoginPageInner() {
               onClick={() => { setRole("pro"); setError(null); setInfo(null); setMagicLinkSent(false); }}
             >
               <div className="icon">🧹</div>
-              <div>I'm a Cleaner</div>
+              <div>I'm a Pro</div>
             </div>
           </div>
 
@@ -343,7 +348,7 @@ function LoginPageInner() {
                     <div className="coming-soon-card">
                       <div style={{ fontSize: 32, marginBottom: 10 }}>📬</div>
                       <div style={{ fontSize: 15, color: "var(--text-mid, #3B5280)", lineHeight: 1.5 }}>
-                        Click the link in that email to sign in to your cleaner dashboard. The link
+                        Click the link in that email to sign in to your Pro dashboard. The link
                         expires in 60 minutes. You can close this page.
                       </div>
                     </div>
@@ -410,7 +415,7 @@ function LoginPageInner() {
                     </button>
 
                     <div className="signup-cta">
-                      Not a cleaner yet?{" "}
+                      Not a Pro yet?{" "}
                       <Link href="/join" className="cta-link">
                         Apply to join →
                       </Link>
