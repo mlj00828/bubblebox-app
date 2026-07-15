@@ -70,8 +70,8 @@ export default function ThanksPage() {
 
         <p className="mt-8 text-xs" style={{ color: "var(--color-muted)" }}>
           Questions?{" "}
-          <a href="mailto:bubbleboxusa@gmail.com" className="underline">
-            bubbleboxusa@gmail.com
+          <a href="mailto:hello@bubbleboxatl.com" className="underline">
+            hello@bubbleboxatl.com
           </a>
         </p>
       </main>
