@@ -446,7 +446,7 @@ function ProfileSection({
       )}
       <div className="profile-note">
         Profile editing is coming soon. To update any of these details, email{" "}
-        <a href="mailto:bubbleboxusa@gmail.com" className="link">bubbleboxusa@gmail.com</a>.
+        <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
       </div>
     </div>
   );
