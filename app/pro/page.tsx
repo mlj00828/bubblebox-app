@@ -235,7 +235,7 @@ export default function ProPage() {
             <p className="signin-sub">
               This page is for approved BubbleBox cleaners. If you applied recently, your
               application may still be pending review. Questions? Email{" "}
-              <a href="mailto:bubbleboxusa@gmail.com" className="link">bubbleboxusa@gmail.com</a>.
+              <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
             </p>
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
               <Link href="/" className="btn-outline">Go home</Link>
@@ -1008,7 +1008,7 @@ function ProfileTab({ pro, email }: { pro: ProRecord; email: string }) {
       />
       <div className="profile-note">
         Profile editing is coming soon. To update any of these details, email{" "}
-        <a href="mailto:bubbleboxusa@gmail.com" className="link">bubbleboxusa@gmail.com</a>.
+        <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
       </div>
     </div>
   );
