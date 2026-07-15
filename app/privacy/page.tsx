@@ -80,7 +80,7 @@ export default function PrivacyPage() {
       </ul>
       <p>
         To exercise these rights, contact us at{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>.
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>.
       </p>
 
       <h2>7. Children's Privacy</h2>
@@ -88,7 +88,7 @@ export default function PrivacyPage() {
         BubbleBox is not directed at children under the age of 13. We do not
         knowingly collect personal information from children. If you believe
         a child has provided information to us, please contact us at{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>{" "}
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>{" "}
         and we will delete it.
       </p>
 
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
       <p>Questions about this Privacy Policy?</p>
       <p>
         <strong>Email:</strong>{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>
         <br />
         <strong>Phone:</strong> +1 (678) 820-4881
         <br />
