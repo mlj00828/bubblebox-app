@@ -80,7 +80,7 @@ export default function TermsPage() {
       <h2>8. Disputes</h2>
       <p>
         If you have a complaint about a pro or a customer, contact us at{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>.
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>.
         BubbleBox will investigate and may issue refunds, credits, or platform
         actions at its discretion.
       </p>
@@ -108,7 +108,7 @@ export default function TermsPage() {
       <h2>12. Contact</h2>
       <p>
         <strong>Email:</strong>{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>
         <br />
         <strong>Phone:</strong> +1 (678) 820-4881
         <br />
