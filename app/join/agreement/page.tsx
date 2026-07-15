@@ -15,7 +15,7 @@ export default function AgreementPage() {
           binding agreement between you and BubbleBox once you check the boxes
           and submit your application. We strongly recommend you read each
           section. Have questions? Email{" "}
-          <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>{" "}
+          <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>{" "}
           before agreeing.
         </p>
         <p style={{ marginTop: "0.75rem", marginBottom: 0 }}>
@@ -223,7 +223,7 @@ export default function AgreementPage() {
         <strong>3.6 Reporting Issues.</strong> If a customer&apos;s home is
         unsafe, the scope of work materially differs from the booking, or any
         other issue arises, contact BubbleBox immediately at{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a> or
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a> or
         +1 (678) 820-4881.
       </p>
 
@@ -315,7 +315,7 @@ export default function AgreementPage() {
       </p>
       <p>
         <strong>Email:</strong>{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>
         <br />
         <strong>Phone:</strong> +1 (678) 820-4881
         <br />
