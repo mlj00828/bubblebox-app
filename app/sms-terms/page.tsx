@@ -71,7 +71,7 @@ export default function SmsTermsPage() {
       </p>
       <p>
         To re-enroll after opting out, contact us at{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a> or
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a> or
         text <strong>START</strong> to the BubbleBox number that previously
         messaged you.
       </p>
@@ -86,7 +86,7 @@ export default function SmsTermsPage() {
       <p>
         For help, reply <strong>HELP</strong> to any BubbleBox SMS message, or
         contact our support team at{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>.
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>.
       </p>
 
       <h2>6. Message and Data Rates</h2>
@@ -129,7 +129,7 @@ export default function SmsTermsPage() {
       <p>Questions about our SMS program?</p>
       <p>
         <strong>Email:</strong>{" "}
-        <a href="mailto:bubbleboxusa@gmail.com">bubbleboxusa@gmail.com</a>
+        <a href="mailto:hello@bubbleboxatl.com">hello@bubbleboxatl.com</a>
         <br />
         <strong>Phone:</strong> +1 (678) 820-4881
         <br />
