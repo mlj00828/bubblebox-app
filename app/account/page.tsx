@@ -389,6 +389,28 @@ function BookingCard({
           Track live status →
         </Link>
       )}
+      {["requested", "broadcasting", "confirmed"].includes(b.status) && customerPhone && (
+        <div style={{ textAlign: "center", marginTop: 8 }}>
+          <button
+            onClick={async () => {
+              if (!window.confirm("Cancel this booking? Free with 24+ hours notice; a 50% fee applies inside 24 hours.")) return;
+              try {
+                const r = await fetch(`${API_BASE}/api/bookings/${b.id}/cancel`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ phone: customerPhone }),
+                });
+                const j = await r.json();
+                alert(r.ok ? j.data.message : (j?.error?.message || "Couldn't cancel — please email hello@bubbleboxatl.com"));
+                if (r.ok) window.location.reload();
+              } catch { alert("Network error — try again."); }
+            }}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--color-muted)", textDecoration: "underline", fontFamily: "inherit" }}
+          >
+            Cancel booking
+          </button>
+        </div>
+      )}
       {b.status === "completed" && (
         <Link
           href={`/review/${b.id}`}
