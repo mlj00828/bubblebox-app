@@ -724,6 +724,8 @@ function JobCard({
   accessToken: string;
   onStatusChange: (id: string, status: string) => void;
 }) {
+  const [released, setReleased] = useState(false);
+
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [captureNote, setCaptureNote] = useState<string | null>(null);
@@ -839,6 +841,33 @@ function JobCard({
               {busy ? "…" : "✓ Complete job"}
             </button>
           )}
+        </div>
+      )}
+      {["confirmed", "enroute"].includes(j.status) && !released && (
+        <div style={{ textAlign: "center", marginTop: 10 }}>
+          <button
+            onClick={async () => {
+              const reason = window.prompt("We get it — things happen. Why can't you make this job? (required)");
+              if (!reason || reason.trim().length < 3) return;
+              if (!window.confirm("Release this job? It will be offered to other cleaners. Under 24 hours notice counts as a strike.")) return;
+              setBusy(true);
+              try {
+                const r = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/cancel`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ reason: reason.trim() }),
+                });
+                const body = await r.json().catch(() => ({}));
+                if (!r.ok) { setErr(body?.error?.message || "Couldn't release the job"); }
+                else { setReleased(true); setCaptureNote(body?.data?.message || "Job released."); }
+              } catch { setErr("Network error — try again"); }
+              finally { setBusy(false); }
+            }}
+            disabled={busy}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#9ca3af", textDecoration: "underline", fontFamily: "inherit" }}
+          >
+            Can&apos;t make this job?
+          </button>
         </div>
       )}
       {err && <div className="job-err">{err}</div>}
