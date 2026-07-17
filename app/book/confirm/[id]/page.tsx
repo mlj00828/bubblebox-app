@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "@/components/Chrome";
+import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { fetchBooking, type BookingResponse, formatPhoneForDisplay, toE164USPhone } from "@/lib/api";
 import { formatPrice } from "@/lib/services";
 
@@ -198,6 +200,13 @@ export default function ConfirmPage() {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
+const stripePromise: Promise<StripeJs | null> | null =
+  typeof window !== "undefined" && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+    : null;
+
+interface TrackAddon { id: string; label: string; cents: number }
+
 const TRACK_STEPS = [
   { key: "broadcasting", label: "Finding your cleaner", icon: "📡" },
   { key: "confirmed", label: "Cleaner assigned", icon: "🙋" },
@@ -210,6 +219,10 @@ const STATUS_ORDER = ["requested", "broadcasting", "confirmed", "enroute", "in_p
 function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string; initialStatus: string }) {
   const [status, setStatus] = useState(initialStatus);
   const [pro, setPro] = useState<{ first_name: string | null; avg_rating: number | null } | null>(null);
+  const [available, setAvailable] = useState<TrackAddon[]>([]);
+  const [purchased, setPurchased] = useState<TrackAddon[]>([]);
+  const [hoursLeft, setHoursLeft] = useState<number | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (status === "completed" || status === "cancelled") return;
@@ -221,14 +234,15 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
         const j = await r.json();
         if (j?.data?.status) setStatus(j.data.status);
         if (j?.data?.pro) setPro(j.data.pro);
-      } catch {
-        // transient — next poll retries
-      }
+        if (j?.data?.available_addons) setAvailable(j.data.available_addons);
+        if (j?.data?.addons) setPurchased(j.data.addons);
+        if (typeof j?.data?.hours_until_window === "number") setHoursLeft(j.data.hours_until_window);
+      } catch {}
     }
     poll();
     const iv = setInterval(poll, 15_000);
     return () => { stopped = true; clearInterval(iv); };
-  }, [id, phone, status]);
+  }, [id, phone, status, refreshKey]);
 
   if (status === "cancelled") {
     return (
@@ -239,32 +253,23 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
   }
 
   const currentIdx = STATUS_ORDER.indexOf(status);
+  const active = !["completed", "cancelled"].includes(status);
 
   return (
     <div className="px-5 py-5" style={{ borderTop: "1px solid var(--color-rule)" }}>
       <div className="mb-4 text-sm font-bold" style={{ color: "var(--color-ink)" }}>
         Live status
-        <span className="ml-2 text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-          updates automatically
-        </span>
+        <span className="ml-2 text-xs font-medium" style={{ color: "var(--color-muted)" }}>updates automatically</span>
       </div>
       {pro?.first_name && (
-        <div
-          className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3"
-          style={{ background: "var(--color-surface)" }}
-        >
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white"
-            style={{ background: "var(--color-accent)" }}
-          >
+        <div className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: "var(--color-surface)" }}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white" style={{ background: "var(--color-accent)" }}>
             {pro.first_name[0]}
           </div>
           <div>
             <div className="text-sm font-bold">{pro.first_name} is your cleaner</div>
             {pro.avg_rating ? (
-              <div className="text-xs" style={{ color: "var(--color-muted)" }}>
-                ★ {Number(pro.avg_rating).toFixed(1)} rating
-              </div>
+              <div className="text-xs" style={{ color: "var(--color-muted)" }}>★ {Number(pro.avg_rating).toFixed(1)} rating</div>
             ) : null}
           </div>
         </div>
@@ -273,28 +278,16 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
         {TRACK_STEPS.map((step) => {
           const stepIdx = STATUS_ORDER.indexOf(step.key);
           const done = currentIdx > stepIdx;
-          const active = currentIdx === stepIdx || (step.key === "broadcasting" && status === "requested");
+          const isActive = currentIdx === stepIdx || (step.key === "broadcasting" && status === "requested");
           return (
             <div key={step.key} className="flex items-center gap-3 py-2">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full text-sm"
-                style={{
-                  background: done ? "var(--color-success)" : active ? "var(--color-accent)" : "var(--color-surface)",
-                  color: done || active ? "white" : "var(--color-muted)",
-                  transition: "all 0.3s",
-                }}
-              >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full text-sm"
+                style={{ background: done ? "var(--color-success)" : isActive ? "var(--color-accent)" : "var(--color-surface)", color: done || isActive ? "white" : "var(--color-muted)", transition: "all 0.3s" }}>
                 {done ? "✓" : step.icon}
               </div>
-              <div
-                className="text-sm"
-                style={{
-                  fontWeight: active ? 700 : 500,
-                  color: done || active ? "var(--color-ink)" : "var(--color-muted)",
-                }}
-              >
+              <div className="text-sm" style={{ fontWeight: isActive ? 700 : 500, color: done || isActive ? "var(--color-ink)" : "var(--color-muted)" }}>
                 {step.label}
-                {active && status !== "completed" && (
+                {isActive && status !== "completed" && (
                   <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-accent)" }} />
                 )}
               </div>
@@ -302,14 +295,160 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
           );
         })}
       </div>
+
+      {purchased.length > 0 && (
+        <div className="mt-3 rounded-xl px-4 py-3 text-sm" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d", fontWeight: 600 }}>
+          Added: {purchased.map((a) => `${a.label} ($${Math.round(a.cents / 100)})`).join(" · ")}
+        </div>
+      )}
+
+      {active && available.length > 0 && (
+        <AddOnsPanel id={id} phone={phone} available={available} onPaid={() => setRefreshKey((k) => k + 1)} />
+      )}
+
+      {["requested", "broadcasting", "confirmed"].includes(status) && (
+        <CancelPanel id={id} phone={phone} hoursLeft={hoursLeft} onCancelled={() => setStatus("cancelled")} />
+      )}
+
       {status === "completed" && (
-        <Link
-          href={`/review/${id}`}
-          className="mt-4 block rounded-full py-3 text-center font-bold text-white no-underline"
-          style={{ background: "var(--color-accent)" }}
-        >
+        <Link href={`/review/${id}`} className="mt-4 block rounded-full py-3 text-center font-bold text-white no-underline" style={{ background: "var(--color-accent)" }}>
           ⭐ Rate your clean
         </Link>
+      )}
+    </div>
+  );
+}
+
+function AddOnsPanel({ id, phone, available, onPaid }: { id: string; phone: string; available: TrackAddon[]; onPaid: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [paying, setPaying] = useState<null | { addon: TrackAddon; clientSecret: string; piId: string }>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function startAddon(a: TrackAddon) {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/bookings/${id}/addon-intent`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, addon_id: a.id }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || "Couldn't start payment");
+      setPaying({ addon: a, clientSecret: j.data.client_secret, piId: j.data.payment_intent_id });
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl px-4 py-4" style={{ background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)" }}>
+      <button onClick={() => setOpen(!open)} style={{ background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit", padding: 0 }}>
+        <div className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
+          ➕ Add services to this booking {open ? "▴" : "▾"}
+        </div>
+        <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+          Want your cleaner to do more? Add it here — they see it instantly.
+        </div>
+      </button>
+
+      {open && !paying && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {available.map((a) => (
+            <button key={a.id} onClick={() => startAddon(a)} disabled={busy}
+              style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 10, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "var(--color-ink)" }}>
+              {a.label}
+              <div style={{ color: "var(--color-accent)", fontWeight: 800 }}>+${Math.round(a.cents / 100)}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {paying && stripePromise && (
+        <div className="mt-3">
+          <div className="mb-2 text-sm font-bold">{paying.addon.label} — ${Math.round(paying.addon.cents / 100)}</div>
+          <Elements stripe={stripePromise} options={{ clientSecret: paying.clientSecret, appearance: { theme: "stripe" } }}>
+            <AddonPayInner id={id} phone={phone} piId={paying.piId} clientSecret={paying.clientSecret}
+              onDone={() => { setPaying(null); setOpen(false); onPaid(); }}
+              onBack={() => setPaying(null)} />
+          </Elements>
+        </div>
+      )}
+      {err && <div className="mt-2 text-xs" style={{ color: "var(--color-danger)" }}>{err}</div>}
+    </div>
+  );
+}
+
+function AddonPayInner({ id, phone, piId, clientSecret, onDone, onBack }: { id: string; phone: string; piId: string; clientSecret: string; onDone: () => void; onBack: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function pay() {
+    if (!stripe || !elements) return;
+    setBusy(true); setErr(null);
+    const sub = await elements.submit();
+    if (sub.error) { setErr(sub.error.message || "Check your card details"); setBusy(false); return; }
+    const result = await stripe.confirmPayment({ elements, clientSecret, confirmParams: { return_url: window.location.href }, redirect: "if_required" });
+    if (result.error) { setErr(result.error.message || "Payment failed"); setBusy(false); return; }
+    try {
+      await fetch(`${API_BASE}/api/bookings/${id}/addon-confirm`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, payment_intent_id: piId }),
+      });
+    } catch {}
+    onDone();
+  }
+
+  return (
+    <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 10, padding: 12 }}>
+      <PaymentElement />
+      {err && <div className="mt-2 text-xs" style={{ color: "var(--color-danger)" }}>{err}</div>}
+      <div className="mt-3 flex gap-2">
+        <button onClick={onBack} disabled={busy} style={{ flex: 1, background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 50, padding: 11, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "var(--color-muted)" }}>Back</button>
+        <button onClick={pay} disabled={busy || !stripe} style={{ flex: 2, background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 11, fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}>
+          {busy ? "Processing…" : "Pay & add"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CancelPanel({ id, phone, hoursLeft, onCancelled }: { id: string; phone: string; hoursLeft: number | null; onCancelled: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const late = hoursLeft !== null && hoursLeft < 24;
+
+  async function cancel() {
+    const warning = late
+      ? "You're within 24 hours of your cleaning window, so a 50% late-cancellation fee applies. Cancel anyway?"
+      : "Cancel this booking? Your card hold will be fully released — you won't be charged.";
+    if (!window.confirm(warning)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/bookings/${id}/cancel`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setMsg(j?.error?.message || "Couldn't cancel — please contact us."); setBusy(false); return; }
+      setMsg(j.data.message);
+      onCancelled();
+    } catch { setMsg("Network error — try again or email hello@bubbleboxatl.com"); setBusy(false); }
+  }
+
+  return (
+    <div className="mt-4 text-center">
+      {msg ? (
+        <div className="text-sm font-semibold" style={{ color: "var(--color-ink-mid)" }}>{msg}</div>
+      ) : (
+        <>
+          <button onClick={cancel} disabled={busy}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textDecoration: "underline", fontFamily: "inherit" }}>
+            {busy ? "Cancelling…" : "Need to cancel this booking?"}
+          </button>
+          <div className="mt-1 text-xs" style={{ color: "var(--color-muted)" }}>
+            Free with 24+ hours notice · 50% fee inside 24 hours
+          </div>
+        </>
       )}
     </div>
   );
