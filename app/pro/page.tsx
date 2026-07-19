@@ -23,6 +23,7 @@ interface ProRecord {
   email: string;
   phone: string;
   bio: string | null;
+  photo_url?: string | null;
   zip_codes: string[];
   services: string[];
   avg_rating: number;
@@ -351,7 +352,7 @@ export default function ProPage() {
         )}
         {tab === "jobs" && <JobsTab accessToken={accessToken} />}
         {tab === "earnings" && <EarningsTab accessToken={accessToken} />}
-        {tab === "profile" && <ProfileTab pro={pro} email={userEmail} />}
+        {tab === "profile" && <ProfileTab pro={pro} email={userEmail} accessToken={accessToken} />}
       </main>
 
       <PageStyles />
@@ -1001,43 +1002,141 @@ function EarningsTab({ accessToken }: { accessToken: string }) {
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────
-function ProfileTab({ pro, email }: { pro: ProRecord; email: string }) {
+function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string; accessToken: string }) {
+  const [phone, setPhone] = useState(pro.phone || "");
+  const [bio, setBio] = useState(pro.bio || "");
+  const [zips, setZips] = useState((pro.zip_codes || []).join(", "));
+  const [photoUrl, setPhotoUrl] = useState<string | null>(pro.photo_url ?? null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Pull the freshest editable fields (covers photo/bio if /me lags behind)
+  useEffect(() => {
+    fetch(`${API_BASE}/api/pros/me/profile`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j?.data) return;
+        setPhone(j.data.phone || "");
+        setBio(j.data.bio || "");
+        setZips((j.data.zip_codes || []).join(", "));
+        setPhotoUrl(j.data.photo_url ?? null);
+      })
+      .catch(() => {});
+  }, [accessToken]);
+
+  async function uploadPhoto(file: File) {
+    setErr(null);
+    if (!file.type.startsWith("image/")) { setErr("Please choose an image file."); return; }
+    if (file.size > 5 * 1024 * 1024) { setErr("Photo must be under 5 MB."); return; }
+    setUploading(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess?.session?.user?.id;
+      if (!uid) throw new Error("Not signed in");
+      const ext = file.type === "image/png" ? "png" : "jpg";
+      const path = `${uid}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("pro-photos")
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: "3600" });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("pro-photos").getPublicUrl(path);
+      const url = `${pub.publicUrl}?v=${Date.now()}`;
+      const r = await fetch(`${API_BASE}/api/pros/me/profile`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_url: url }),
+      });
+      if (!r.ok) throw new Error("Couldn't save the photo");
+      setPhotoUrl(url);
+      setMsg("Photo updated! Customers now see your face when you're assigned. ✨");
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed — try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function save() {
+    setErr(null); setMsg(null);
+    const zipList = zips.split(/[\s,]+/).filter(Boolean);
+    if (zipList.some((z) => !/^\d{5}$/.test(z))) { setErr("ZIPs must be 5 digits, separated by commas."); return; }
+    if (zipList.length === 0) { setErr("Add at least one service ZIP."); return; }
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) { setErr("Enter a valid phone number."); return; }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/pros/me/profile`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone.trim(), bio: bio.trim(), zip_codes: zipList }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(body?.error?.message || "Couldn't save — try again."); return; }
+      setMsg("Profile saved ✓");
+    } catch {
+      setErr("Network error — try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="profile-card">
-      <ProfileRow label="Name" value={pro.full_name} />
-      <ProfileRow label="Email" value={pro.email || email} />
-      <ProfileRow label="Phone" value={pro.phone} />
-      <ProfileRow
-        label="Service ZIPs"
-        value={pro.zip_codes.length ? pro.zip_codes.join(", ") : "—"}
-      />
-      <ProfileRow
-        label="Services"
-        value={pro.services.length ? pro.services.join(", ") : "—"}
-      />
-      <ProfileRow
-        label="Background check"
-        value={
-          <span className={`status-pill tone-${pro.background_check_status === "cleared" ? "green" : "blue"}`}>
-            {pro.background_check_status}
-          </span>
-        }
-      />
-      <ProfileRow
-        label="Account status"
-        value={
-          <span className={`status-pill tone-${pro.application_status === "approved" ? "green" : "blue"}`}>
-            {pro.application_status}
-          </span>
-        }
-      />
-      <ProfileRow
-        label="Cleaner since"
-        value={new Date(pro.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-      />
-      <div className="profile-note">
-        Profile editing is coming soon. To update any of these details, email{" "}
-        <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photoUrl} alt="Profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid var(--blue)" }} />
+        ) : (
+          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--blue)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800 }}>
+            {(pro.full_name || "?")[0]}
+          </div>
+        )}
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>{pro.full_name}</div>
+          <label style={{ display: "inline-block", marginTop: 6, fontSize: 13, fontWeight: 700, color: "var(--blue)", cursor: "pointer", textDecoration: "underline" }}>
+            {uploading ? "Uploading…" : photoUrl ? "Change photo" : "📷 Add a profile photo"}
+            <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.currentTarget.value = ""; }} />
+          </label>
+          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>Customers see this when you&apos;re their cleaner. A friendly photo wins jobs.</div>
+        </div>
+      </div>
+
+      <div className="profile-row"><div className="profile-label">Email</div><div className="profile-value">{pro.email || email}</div></div>
+
+      <div style={{ padding: "12px 0", borderBottom: "1px solid #eef2f7" }}>
+        <div className="profile-label" style={{ marginBottom: 6 }}>Phone</div>
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel"
+          style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+      </div>
+
+      <div style={{ padding: "12px 0", borderBottom: "1px solid #eef2f7" }}>
+        <div className="profile-label" style={{ marginBottom: 6 }}>Service ZIP codes <span style={{ fontWeight: 400, color: "#9ca3af" }}>(comma-separated — jobs in these ZIPs come to you first)</span></div>
+        <input value={zips} onChange={(e) => setZips(e.target.value)} placeholder="30311, 30318, 30310"
+          style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+      </div>
+
+      <div style={{ padding: "12px 0", borderBottom: "1px solid #eef2f7" }}>
+        <div className="profile-label" style={{ marginBottom: 6 }}>About you <span style={{ fontWeight: 400, color: "#9ca3af" }}>(customers see this — a sentence or two)</span></div>
+        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} maxLength={400}
+          placeholder="e.g. 8 years of residential cleaning experience. I love leaving kitchens spotless!"
+          style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
+      </div>
+
+      <div className="profile-row"><div className="profile-label">Services</div><div className="profile-value">{pro.services.length ? pro.services.join(", ") : "—"}</div></div>
+      <div className="profile-row"><div className="profile-label">Background check</div><div className="profile-value"><span className={`status-pill tone-${pro.background_check_status === "cleared" ? "green" : "blue"}`}>{pro.background_check_status}</span></div></div>
+      <div className="profile-row"><div className="profile-label">Account status</div><div className="profile-value"><span className={`status-pill tone-${pro.application_status === "approved" ? "green" : "blue"}`}>{pro.application_status}</span></div></div>
+
+      {err && <div style={{ marginTop: 12, fontSize: 13, color: "#b91c1c", background: "#fef2f2", borderRadius: 8, padding: "8px 12px" }}>{err}</div>}
+      {msg && <div style={{ marginTop: 12, fontSize: 13, color: "#15803d", fontWeight: 600, background: "#f0fdf4", borderRadius: 8, padding: "8px 12px" }}>{msg}</div>}
+
+      <button onClick={save} disabled={saving} className="btn-accept" style={{ width: "100%", marginTop: 16 }}>
+        {saving ? "Saving…" : "Save profile"}
+      </button>
+      <div className="profile-note" style={{ marginTop: 12 }}>
+        Name, services, or account changes: email <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
       </div>
     </div>
   );
