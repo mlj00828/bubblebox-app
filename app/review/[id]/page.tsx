@@ -19,6 +19,19 @@ export default function ReviewPage() {
   const [phone, setPhoneState] = useState<string | null>(null);
   const [phoneInput, setPhoneInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [cleaner, setCleaner] = useState<{ pro_id?: string; first_name: string } | null>(null);
+
+  // On the thank-you screen, learn who cleaned so we can offer a one-tap rebook
+  useEffect(() => {
+    if (phase !== "done" || !phone) return;
+    fetch(`${API_BASE}/api/bookings/${id}/track?phone=${encodeURIComponent(phone)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const first = j?.data?.pro?.first_name;
+        if (first) setCleaner({ first_name: first });
+      })
+      .catch(() => {});
+  }, [phase, phone, id]);
 
   const loadWithPhone = useCallback(
     async (p: string) => {
@@ -148,11 +161,15 @@ export default function ReviewPage() {
               Your feedback helps your cleaner and keeps BubbleBox sparkling.
             </p>
             <Link
-              href="/book"
+              href={
+                cleaner && booking?.pro_id
+                  ? `/book?pro=${encodeURIComponent(booking.pro_id)}&name=${encodeURIComponent(cleaner.first_name)}`
+                  : "/book"
+              }
               className="mt-8 inline-block rounded-full px-6 py-3 font-bold text-white no-underline"
               style={{ background: "var(--color-accent)" }}
             >
-              Book your next clean
+              {cleaner ? `🔁 Book ${cleaner.first_name} again` : "Book your next clean"}
             </Link>
           </div>
         )}
