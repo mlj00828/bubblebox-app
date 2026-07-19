@@ -379,6 +379,8 @@ function Topbar({ onSignOut }: { onSignOut?: () => void }) {
 // Uber-style: open offers are shown to every eligible pro; first to accept
 // wins the job. Polls every 20s while this tab is open.
 interface Offer {
+  requested_by_customer?: boolean;
+  customer_first?: string | null;
   id: string;
   booking_id?: string;
   status?: string;
@@ -550,6 +552,7 @@ function OfferCard({
 }) {
   const { job: j } = normalizeOffer(offer);
   const [now, setNow] = useState(() => Date.now());
+  const requested = offer.requested_by_customer;
 
   // live countdown if the offer expires
   useEffect(() => {
@@ -581,7 +584,12 @@ function OfferCard({
   }
 
   return (
-    <div className="booking-card offer-card">
+    <div className="booking-card offer-card" style={requested ? { border: "2px solid #f59e0b", boxShadow: "0 2px 12px rgba(245,158,11,0.18)" } : undefined}>
+      {requested && (
+        <div style={{ background: "#fffbeb", color: "#92400e", fontSize: 12.5, fontWeight: 800, borderRadius: 8, padding: "6px 10px", marginBottom: 10, display: "inline-block" }}>
+          ⭐ {offer.customer_first || "A customer"} requested you again
+        </div>
+      )}
       <div className="booking-head">
         <div className="booking-svc">
           <span className="booking-icon">{j.service_icon || "🫧"}</span>
