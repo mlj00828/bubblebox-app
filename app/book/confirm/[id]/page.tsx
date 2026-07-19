@@ -219,6 +219,7 @@ const STATUS_ORDER = ["requested", "broadcasting", "confirmed", "enroute", "in_p
 function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string; initialStatus: string }) {
   const [status, setStatus] = useState(initialStatus);
   const [pro, setPro] = useState<{ first_name: string | null; avg_rating: number | null; photo_url?: string | null; bio?: string | null } | null>(null);
+  const [preferred, setPreferred] = useState<{ first_name: string; state: string } | null>(null);
   const [available, setAvailable] = useState<TrackAddon[]>([]);
   const [purchased, setPurchased] = useState<TrackAddon[]>([]);
   const [hoursLeft, setHoursLeft] = useState<number | null>(null);
@@ -234,6 +235,7 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
         const j = await r.json();
         if (j?.data?.status) setStatus(j.data.status);
         if (j?.data?.pro) setPro(j.data.pro);
+        setPreferred(j?.data?.preferred ?? null);
         if (j?.data?.available_addons) setAvailable(j.data.available_addons);
         if (j?.data?.addons) setPurchased(j.data.addons);
         if (typeof j?.data?.hours_until_window === "number") setHoursLeft(j.data.hours_until_window);
@@ -261,6 +263,14 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
         Live status
         <span className="ml-2 text-xs font-medium" style={{ color: "var(--color-muted)" }}>updates automatically</span>
       </div>
+      {preferred && ["waiting", "searching"].includes(preferred.state) && (
+        <div className="mb-4 rounded-xl px-4 py-3 text-sm font-semibold"
+          style={{ background: preferred.state === "waiting" ? "#eff6ff" : "#fffbeb", border: `1px solid ${preferred.state === "waiting" ? "#bfdbfe" : "#fde68a"}`, color: preferred.state === "waiting" ? "#1e40af" : "#92400e" }}>
+          {preferred.state === "waiting"
+            ? `⏳ Waiting for ${preferred.first_name} to confirm — your requested cleaner gets first dibs`
+            : `${preferred.first_name} isn't available right now — finding you another great cleaner`}
+        </div>
+      )}
       {pro?.first_name && (
         <div className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: "var(--color-surface)" }}>
           {pro.photo_url ? (
@@ -272,7 +282,12 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
             </div>
           )}
           <div>
-            <div className="text-sm font-bold">{pro.first_name} is your cleaner</div>
+            <div className="text-sm font-bold">
+              {pro.first_name} is your cleaner
+              {preferred?.state === "confirmed" && (
+                <span className="ml-2 text-xs font-bold" style={{ color: "var(--color-success)" }}>✓ your requested cleaner</span>
+              )}
+            </div>
             {pro.avg_rating ? (
               <div className="text-xs" style={{ color: "var(--color-muted)" }}>★ {Number(pro.avg_rating).toFixed(1)} rating</div>
             ) : null}
