@@ -56,7 +56,7 @@ function LoginPageInner() {
               last_name: lastName.trim(),
               role: "customer",
             },
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=/account`,
           },
         }), timeout]);
         if (signUpError) throw signUpError;
@@ -137,7 +137,10 @@ function LoginPageInner() {
         options: {
           // Don't create a new user if they don't exist — pros are created by admin approval
           shouldCreateUser: false,
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          // ?next=/pro tells the callback this sign-in came from the Pro form,
+          // so it routes to the Pro dashboard even if the same email also has
+          // a customer account.
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/pro`,
         },
       });
       if (otpError) {
