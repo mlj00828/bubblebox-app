@@ -218,7 +218,7 @@ const STATUS_ORDER = ["requested", "broadcasting", "confirmed", "enroute", "in_p
 
 function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string; initialStatus: string }) {
   const [status, setStatus] = useState(initialStatus);
-  const [pro, setPro] = useState<{ first_name: string | null; avg_rating: number | null } | null>(null);
+  const [pro, setPro] = useState<{ first_name: string | null; avg_rating: number | null; photo_url?: string | null; bio?: string | null } | null>(null);
   const [available, setAvailable] = useState<TrackAddon[]>([]);
   const [purchased, setPurchased] = useState<TrackAddon[]>([]);
   const [hoursLeft, setHoursLeft] = useState<number | null>(null);
@@ -263,13 +263,21 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
       </div>
       {pro?.first_name && (
         <div className="mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: "var(--color-surface)" }}>
-          <div className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white" style={{ background: "var(--color-accent)" }}>
-            {pro.first_name[0]}
-          </div>
+          {pro.photo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pro.photo_url} alt={pro.first_name ?? "Your cleaner"} className="h-12 w-12 rounded-full object-cover" style={{ border: "2px solid var(--color-accent)" }} />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-white" style={{ background: "var(--color-accent)" }}>
+              {pro.first_name[0]}
+            </div>
+          )}
           <div>
             <div className="text-sm font-bold">{pro.first_name} is your cleaner</div>
             {pro.avg_rating ? (
               <div className="text-xs" style={{ color: "var(--color-muted)" }}>★ {Number(pro.avg_rating).toFixed(1)} rating</div>
+            ) : null}
+            {pro.bio ? (
+              <div className="mt-1 text-xs" style={{ color: "var(--color-ink-mid)", maxWidth: 340 }}>{pro.bio}</div>
             ) : null}
           </div>
         </div>
