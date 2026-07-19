@@ -51,6 +51,7 @@ export default function AccountPage() {
   const [data, setData] = useState<AccountData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("upcoming");
+  const [accessToken, setAccessToken] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +71,7 @@ export default function AccountPage() {
 
       setAuthed(true);
       setUserEmail(sessionData.session.user?.email || "");
+      setAccessToken(sessionData.session.access_token || "");
 
       try {
         const resp = await fetch(`${API_BASE}/api/customers/me`, {
@@ -214,10 +216,17 @@ export default function AccountPage() {
           <p className="greeting-sub">
             {customer
               ? `Welcome back to your BubbleBox account`
-              : `Once you book a cleaning, your details will show up here.`}
+              : `Finish setting up your account below to link your bookings.`}
           </p>
         </div>
       </div>
+
+      {!customer && accessToken && (
+        <CompleteProfileCard
+          accessToken={accessToken}
+          onDone={() => window.location.reload()}
+        />
+      )}
 
       <nav className="tabs">
         <button
@@ -740,5 +749,64 @@ function PageStyles() {
         text-align: center;
       }
     `}</style>
+  );
+}
+
+
+// ─── Complete-profile card ─────────────────────────────────────
+// Signup collects name/email only; a customer record also needs a phone
+// (it's how bookings are matched). Shown once, then never again.
+function CompleteProfileCard({ accessToken, onDone }: { accessToken: string; onDone: () => void }) {
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setErr(null);
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) { setErr("Enter a valid 10-digit US phone number."); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/customers/me/sync`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(j?.error?.message || "Couldn't save — try again."); setBusy(false); return; }
+      onDone();
+    } catch {
+      setErr("Network error — try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ background: "white", border: "1.5px solid var(--color-surface-mid)", borderRadius: 16, padding: "22px 24px", marginBottom: 24 }}>
+      <div style={{ fontSize: 16, fontWeight: 800, color: "var(--color-ink)" }}>Finish setting up your account</div>
+      <p style={{ fontSize: 14, color: "var(--color-muted)", margin: "6px 0 14px", lineHeight: 1.6 }}>
+        Add the phone number you use for bookings. If you&apos;ve booked with us before,
+        this links your booking history to your account automatically.
+      </p>
+      <div style={{ display: "flex", gap: 10 }}>
+        <input
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="(404) 555-0199"
+          style={{ flex: 1, padding: "12px 14px", border: "1.5px solid var(--color-surface-mid)", borderRadius: 10, fontSize: 15, fontFamily: "inherit", outline: "none" }}
+        />
+        <button
+          onClick={save}
+          disabled={busy}
+          style={{ background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {err && <div style={{ marginTop: 10, fontSize: 13, color: "var(--color-danger)" }}>{err}</div>}
+    </div>
   );
 }
