@@ -51,18 +51,27 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      // Read the sign-in intent BEFORE we clean the URL. The login page sets
+      // ?next=/pro (Pro form) or ?next=/account (customer signup). This wins
+      // over role metadata so one email can hold both a customer and a pro
+      // account and still land on the side they asked for.
+      let next: string | null = null;
+      if (typeof window !== "undefined") {
+        const requested = new URLSearchParams(window.location.search).get("next");
+        if (requested === "/pro" || requested === "/account") next = requested;
+      }
+
       // Clear the token hash from the URL so a refresh doesn't reprocess it
-      if (typeof window !== "undefined" && window.location.hash) {
+      if (typeof window !== "undefined" && (window.location.hash || window.location.search)) {
         window.history.replaceState(null, "", window.location.pathname);
       }
 
-      // Route based on role stored in user_metadata
-      const role = session.user?.user_metadata?.role;
-      if (role === "pro") {
-        router.replace("/pro");
+      if (next) {
+        router.replace(next);
       } else {
-        // customers and anyone else go to /account
-        router.replace("/account");
+        // No explicit intent (e.g. Google OAuth) — fall back to role metadata
+        const role = session.user?.user_metadata?.role;
+        router.replace(role === "pro" ? "/pro" : "/account");
       }
     }
 
