@@ -121,6 +121,8 @@ function defaultState(): BookingState {
 function BookPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const preferredProId = searchParams?.get("pro") ?? null;
+  const preferredProName = searchParams?.get("name") ?? null;
   const [step, setStep] = useState(1);
   const [state, setState] = useState<BookingState>(defaultState);
   const [calYear, setCalYear] = useState(new Date().getFullYear());
@@ -210,6 +212,13 @@ function BookPageInner() {
       });
 
       try { sessionStorage.setItem(`booking-phone-${res.id}`, phoneE164); } catch {}
+      if (preferredProId) {
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.bubbleboxatl.com"}/api/bookings/${res.id}/prefer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phoneE164, pro_id: preferredProId }),
+        }).catch(() => {});
+      }
 
       // Attach Stripe payment intent to the booking
       if (state.clientSecret) {
@@ -285,6 +294,11 @@ function BookPageInner() {
       </div>
 
       {/* Main content */}
+      {preferredProId && (
+        <div style={{ background: "#eff6ff", borderBottom: "1px solid #bfdbfe", padding: "10px 20px", textAlign: "center", fontSize: 13.5, fontWeight: 600, color: "#1e40af" }}>
+          🔁 Requesting {preferredProName || "your previous cleaner"} — they get first chance to accept this job
+        </div>
+      )}
       <main style={{ flex: 1, padding: "24px 20px 140px", maxWidth: 640, margin: "0 auto", width: "100%", animation: "stepIn 0.3s ease" }}>
         {step === 1 && <Step1 state={state} update={update} />}
         {step === 2 && <Step2 state={state} update={update} />}
