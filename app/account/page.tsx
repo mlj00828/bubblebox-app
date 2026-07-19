@@ -18,6 +18,9 @@ interface CustomerData {
 }
 
 interface Booking {
+  pro_id?: string | null;
+  pro_full_name?: string | null;
+  pro_rating?: number | null;
   id: string;
   status: string;
   service_id: string;
@@ -421,13 +424,24 @@ function BookingCard({
         </div>
       )}
       {b.status === "completed" && (
-        <Link
-          href={`/review/${b.id}`}
-          onClick={rememberPhone}
-          style={{ display: "block", textAlign: "center", marginTop: 14, padding: "12px", borderRadius: 50, border: "1.5px solid var(--color-accent)", color: "var(--color-accent)", fontWeight: 700, fontSize: 14, textDecoration: "none" }}
-        >
-          ⭐ Rate this clean
-        </Link>
+        <>
+          {b.pro_id && (
+            <Link
+              href={`/book?pro=${encodeURIComponent(b.pro_id)}${b.pro_full_name ? `&name=${encodeURIComponent(b.pro_full_name.split(" ")[0])}` : ""}`}
+              className="btn-primary"
+              style={{ display: "block", textAlign: "center", marginTop: 14, textDecoration: "none" }}
+            >
+              🔁 Book {b.pro_full_name ? b.pro_full_name.split(" ")[0] : "them"} again
+            </Link>
+          )}
+          <Link
+            href={`/review/${b.id}`}
+            onClick={rememberPhone}
+            style={{ display: "block", textAlign: "center", marginTop: 10, padding: "12px", borderRadius: 50, border: "1.5px solid var(--color-accent)", color: "var(--color-accent)", fontWeight: 700, fontSize: 14, textDecoration: "none" }}
+          >
+            ⭐ Rate this clean
+          </Link>
+        </>
       )}
     </div>
   );
