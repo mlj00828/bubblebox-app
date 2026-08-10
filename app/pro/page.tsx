@@ -14,6 +14,14 @@ const PRO_SHARE = 0.8;
 function payoutDollars(totalCents: number): string {
   return (Math.round(totalCents * PRO_SHARE) / 100).toFixed(2);
 }
+// Cleaners are paid on the full value of the work. Customer promo discounts
+// are BubbleBox's marketing cost, not a cut of the cleaner's pay, so the
+// discount is added back before the 80% split. Mid-job add-ons are included
+// because they live in final_total_cents.
+function payoutBaseCents(j: { final_total_cents?: number | null; estimated_total_cents?: number | null; discount_cents?: number | null }): number {
+  const charged = j.final_total_cents ?? j.estimated_total_cents ?? 0;
+  return charged + (j.discount_cents ?? 0);
+}
 type JobFilter = "upcoming" | "past" | "all";
 type Period = "week" | "month" | "year" | "all";
 
@@ -57,6 +65,7 @@ interface Job {
   notes: string | null;
   estimated_total_cents: number | null;
   final_total_cents: number | null;
+  discount_cents?: number | null;
   payment_status: string;
   created_at: string;
   service_name: string | null;
@@ -568,7 +577,7 @@ function OfferCard({
         day: "numeric",
       })
     : "Date TBD";
-  const total = j.final_total_cents ?? j.estimated_total_cents ?? 0;
+  const total = payoutBaseCents(j);
 
   let countdown: string | null = null;
   let expired = false;
@@ -776,7 +785,7 @@ function JobCard({
         day: "numeric",
       })
     : "Date TBD";
-  const total = j.final_total_cents ?? j.estimated_total_cents ?? 0;
+  const total = payoutBaseCents(j);
   const totalDollars = (total / 100).toFixed(0);
 
   const statusLabels: Record<string, { label: string; tone: string }> = {
