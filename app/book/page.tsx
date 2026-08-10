@@ -200,7 +200,10 @@ function BookPageInner() {
 
     try {
       const res = await createBooking({
-        estimated_total_cents: calcTotal() * 100,
+        // Send the PRE-promo subtotal. The backend applies the promo itself
+        // (it stores discount_cents and computes final_total_cents), so
+        // sending the discounted figure here would apply it twice.
+        estimated_total_cents: calcSubtotal() * 100,
         service_id: state.service!,
         zip: state.zip,
         preferred_date: state.date,
