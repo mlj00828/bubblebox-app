@@ -17,6 +17,10 @@ export interface Service {
   imageUrl: string;
   imageAlt: string;
   popular?: boolean;
+  /** Everything this tier adds beyond the standard room-by-room checklist. */
+  extras?: string[];
+  /** Paid add-ons that ARE bundled into this tier at no extra charge. */
+  includedAddons?: string[];
 }
 
 const UNSPLASH = (id: string, w: number, h: number) =>
@@ -51,7 +55,21 @@ export const SERVICES: Service[] = [
     name: "Deep Cleaning",
     icon: "✨",
     shortDescription: "Top-to-bottom detailed clean",
-    longDescription: "Baseboards, inside appliances, detailed bathrooms. The works. Recommended quarterly.",
+    longDescription: "Baseboards, door frames, vents, grout, window tracks. Every detail a standard clean skips. Recommended quarterly.",
+    extras: [
+      "Baseboards hand-wiped throughout",
+      "Door frames, door tops & interior doors washed",
+      "Light fixtures & ceiling fan blades wiped individually",
+      "Air vent & register covers dusted",
+      "Window sills, tracks & frames detailed",
+      "Shower door tracks & glass descaled",
+      "Tile grout scrubbed in bathrooms",
+      "Cabinet fronts degreased (kitchen & bath)",
+      "Behind & under moveable furniture vacuumed",
+      "Switch plates, outlet covers & handrails wiped",
+      "Under & behind the toilet detailed",
+      "Trash cans wiped inside & out",
+    ],
     basePriceCents: 16900,
     durationHint: "~5 hrs",
     imageUrl: UNSPLASH("photo-1584622650111-993a426fbf0a", 600, 400),
@@ -62,7 +80,16 @@ export const SERVICES: Service[] = [
     name: "Move In / Out",
     icon: "📦",
     shortDescription: "Empty home deep clean",
-    longDescription: "Inside cabinets, drawers, appliances. Move-ready or deposit-ready when we leave.",
+    longDescription: "Inside cabinets and drawers, every surface detailed. Move-ready or deposit-ready when we leave.",
+    extras: [
+      "Everything in a deep clean",
+      "Inside all cabinets & drawers wiped",
+      "Inside closets & storage wiped",
+      "Appliance exteriors & sides cleaned",
+      "Walls spot-cleaned for marks & scuffs",
+      "Interior windows cleaned",
+    ],
+    includedAddons: ["Inside cabinets", "Interior windows"],
     basePriceCents: 21900,
     durationHint: "~6 hrs",
     imageUrl: UNSPLASH("photo-1502672260266-1c1ef2d93688", 600, 400),
@@ -74,6 +101,15 @@ export const SERVICES: Service[] = [
     icon: "🏗️",
     shortDescription: "Cleanup after renovation",
     longDescription: "Heavy-duty dust, debris, fine particles, finishes. Bring your home back from the construction zone.",
+    extras: [
+      "Everything in a deep clean",
+      "Fine construction dust removed from all surfaces",
+      "Inside cabinets, drawers & closets",
+      "Interior windows, tracks & frames",
+      "Vents & fixtures detailed",
+      "Adhesive, paint spots & residue removed",
+    ],
+    includedAddons: ["Inside cabinets", "Interior windows"],
     basePriceCents: 27900,
     durationHint: "~7 hrs",
     imageUrl: UNSPLASH("photo-1600585154340-be6161a56a0c", 600, 400),
