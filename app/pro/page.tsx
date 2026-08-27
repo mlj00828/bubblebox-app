@@ -18,6 +18,21 @@ function payoutDollars(totalCents: number): string {
 // are BubbleBox's marketing cost, not a cut of the cleaner's pay, so the
 // discount is added back before the 80% split. Mid-job add-ons are included
 // because they live in final_total_cents.
+const WINDOW_LABEL: Record<string, string> = { morning: "Morning (8am-12pm)", afternoon: "Afternoon (12pm-5pm)", evening: "Evening (5pm-8pm)" };
+// Customers choose an exact start time; we guarantee a 30-minute arrival window.
+function arrivalWindow(j: { preferred_time?: string | null; preferred_window?: string | null }): string {
+  const t = j.preferred_time;
+  if (!t) return WINDOW_LABEL[j.preferred_window ?? ""] ?? j.preferred_window ?? "TBD";
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(t.trim());
+  if (!m) return t;
+  let h = parseInt(m[1], 10) % 12;
+  if (/PM/i.test(m[3])) h += 12;
+  const end = new Date(2000, 0, 1, h, parseInt(m[2], 10) + 30);
+  const eh = end.getHours() % 12 || 12;
+  const em = String(end.getMinutes()).padStart(2, "0");
+  return `${t} - ${eh}:${em} ${end.getHours() >= 12 ? "PM" : "AM"}`;
+}
+
 function scopeLine(j: { bedrooms?: number | null; bathrooms?: number | null; half_baths?: number | null }): string | null {
   if (j.bedrooms === null || j.bedrooms === undefined) return null;
   const parts = [`${j.bedrooms} bed`, `${j.bathrooms ?? 0} bath`];
@@ -67,6 +82,7 @@ interface Job {
   status: string;
   preferred_date: string;
   preferred_window: string | null;
+  preferred_time?: string | null;
   scheduled_start_at: string | null;
   zip: string;
   address_line: string | null;
@@ -630,7 +646,7 @@ function OfferCard({
 
       <dl className="booking-rows">
         <Row label="Date" value={date} />
-        <Row label="Window" value={j.preferred_window || "—"} />
+        <Row label="Arrive between" value={<strong style={{ color: "#0A2FA8" }}>{arrivalWindow(j)}</strong>} />
         {scopeLine(j) && <Row label="Size" value={scopeLine(j)!} />}
         {j.supplies_provided !== null && j.supplies_provided !== undefined && (
           <Row
@@ -833,7 +849,7 @@ function JobCard({
 
       <dl className="booking-rows">
         <Row label="Date" value={date} />
-        <Row label="Window" value={j.preferred_window || "—"} />
+        <Row label="Arrive between" value={<strong style={{ color: "#0A2FA8" }}>{arrivalWindow(j)}</strong>} />
         {scopeLine(j) && <Row label="Size" value={scopeLine(j)!} />}
         {j.supplies_provided !== null && j.supplies_provided !== undefined && (
           <Row
