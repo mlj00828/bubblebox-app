@@ -19,6 +19,11 @@ export interface CreateBookingPayload {
   };
   estimated_total_cents?: number;
   promo_code?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  half_baths?: number;
+  supplies_provided?: boolean;
+  frequency?: string;
 }
 
 export interface BookingResponse {
