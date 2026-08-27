@@ -1,1664 +1,953 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { BubbleLogo } from "@/components/Chrome";
+import { SERVICES, formatPrice, type ServiceId } from "@/lib/services";
+import { isInServiceArea } from "@/lib/service-area";
+import { createBooking, toE164USPhone, formatPhoneForDisplay, BookingError, validatePromo, PromoError } from "@/lib/api";
+import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
+const STRIPE_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
+const stripePromise: Promise<StripeJs | null> | null =
+  typeof window !== "undefined" && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+    : null;
 
-type Tab = "offers" | "jobs" | "earnings" | "profile";
 
-// Pros keep 80% of every job; BubbleBox's service fee is 20%.
-const PRO_SHARE = 0.8;
-function payoutDollars(totalCents: number): string {
-  return (Math.round(totalCents * PRO_SHARE) / 100).toFixed(2);
-}
-// Cleaners are paid on the full value of the work. Customer promo discounts
-// are BubbleBox's marketing cost, not a cut of the cleaner's pay, so the
-// discount is added back before the 80% split. Mid-job add-ons are included
-// because they live in final_total_cents.
-function scopeLine(j: { bedrooms?: number | null; bathrooms?: number | null; half_baths?: number | null }): string | null {
-  if (j.bedrooms === null || j.bedrooms === undefined) return null;
-  const parts = [`${j.bedrooms} bed`, `${j.bathrooms ?? 0} bath`];
-  if (j.half_baths) parts.push(`${j.half_baths} half`);
-  return parts.join(" · ");
-}
 
-// Cleaners keep 80% of what the customer actually pays (post-discount).
-// Mid-job add-ons are included because they live in final_total_cents.
-function payoutBaseCents(j: { final_total_cents?: number | null; estimated_total_cents?: number | null }): number {
-  return j.final_total_cents ?? j.estimated_total_cents ?? 0;
-}
-type JobFilter = "upcoming" | "past" | "all";
-type Period = "week" | "month" | "year" | "all";
+// ── Types ──────────────────────────────────────────────────────────────
+type Window = "morning" | "afternoon" | "evening";
+type PayMethod = "card" | "applepay" | "googlepay" | "cashapp";
+type PromoStatus = "idle" | "valid" | "invalid";
 
-interface ProRecord {
-  id: string;
-  full_name: string;
+interface BookingState {
+  service: ServiceId | null;
+  bedrooms: number;
+  bathrooms: number;
+  halfBaths: number;
+  addons: Set<string>;
+  frequency: string;
+  date: string;
+  time: string;
+  address: string;
+  apt: string;
+  city: string;
+  zip: string;
+  stateCode: string;
+  specialInstructions: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  bio: string | null;
-  photo_url?: string | null;
-  zip_codes: string[];
-  services: string[];
-  avg_rating: number;
-  completed_jobs: number;
-  background_check_status: string;
-  application_status: string;
-  sms_opted_out: boolean;
-  created_at: string;
+  payMethod: PayMethod;
+  cardName: string;
+  cardNum: string;
+  cardExp: string;
+  cardCvv: string;
+  payConfirmed: boolean;
+  clientSecret: string | null;
+  promoCode: string;
+  promoDiscount: number; // cents
+  promoStatus: PromoStatus;
+  promoMessage: string;
 }
 
-interface Activity {
-  total_jobs: number;
-  completed_jobs: number;
-  active_jobs: number;
-  lifetime_earnings_cents: number;
+// ── Pricing constants ──────────────────────────────────────────────────
+const BASE_PRICES: Record<string, number> = { "standard-cleaning":99,"deep-cleaning":169,"move-in-out":219,"airbnb-turnover":109,"post-construction":279,"office-cleaning":129 };
+const BED_PRICE = 25, BATH_PRICE = 30, HALF_BATH = 15;
+const ADDON_PRICES: Record<string, number> = { ownsupplies:-10,oven:45,fridge:35,windows:50,laundry:30,cabinets:40,garage:60,patio:55,walls:70,blinds:35 };
+const FREQ_DISCOUNTS: Record<string, number> = { once:0,weekly:0.20,biweekly:0.15,monthly:0.10 };
+
+const ADDONS = [
+  { id:"ownsupplies",icon:"🧴",name:"I'll Provide My Own Supplies",desc:"Save $10 when you supply your own cleaning products",price:"-$10",discount:true },
+  { id:"oven",icon:"🍳",name:"Inside Oven",desc:"Deep clean oven interior & racks",price:"+$45" },
+  { id:"fridge",icon:"❄️",name:"Inside Fridge",desc:"Full refrigerator interior clean",price:"+$35" },
+  { id:"windows",icon:"🪟",name:"Interior Windows",desc:"Clean windows, sills & tracks",price:"+$50" },
+  { id:"laundry",icon:"👕",name:"Laundry (Wash & Dry)",desc:"Up to 2 loads washed & dried",price:"+$30" },
+  { id:"cabinets",icon:"🗄️",name:"Inside Cabinets",desc:"Kitchen & bathroom cabinets",price:"+$40" },
+  { id:"garage",icon:"🚗",name:"Garage Sweep",desc:"Sweep & tidy the garage",price:"+$60" },
+  { id:"patio",icon:"🌿",name:"Patio / Balcony",desc:"Sweep & wipe outdoor surfaces",price:"+$55" },
+  { id:"walls",icon:"🖼️",name:"Wall Spot Cleaning",desc:"Remove marks & scuffs",price:"+$70" },
+  { id:"blinds",icon:"🪞",name:"Blinds Cleaning",desc:"Wipe down all window blinds",price:"+$35" },
+];
+
+const FREQUENCIES = [
+  { id:"once",icon:"1️⃣",name:"One-Time",desc:"Single visit, no commitment",discount:null },
+  { id:"weekly",icon:"📅",name:"Weekly",desc:"Every week, same day",discount:"Save 20%" },
+  { id:"biweekly",icon:"🔄",name:"Bi-Weekly",desc:"Every two weeks",discount:"Save 15%" },
+  { id:"monthly",icon:"🗓️",name:"Monthly",desc:"Once per month",discount:"Save 10%" },
+];
+
+const TIME_SLOTS = ["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM"];
+
+// Minimum notice before a slot can start — gives a cleaner time to accept
+// the job and travel there.
+const MIN_LEAD_MINUTES = 120;
+
+function slotHour24(t: string): number {
+  const [time, mer] = t.split(" ");
+  let h = parseInt(time.split(":")[0], 10);
+  if (mer === "PM" && h !== 12) h += 12;
+  if (mer === "AM" && h === 12) h = 0;
+  return h;
 }
 
-interface MeResponse {
-  pro: ProRecord;
-  activity: Activity;
+function todayStr(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
 }
 
-interface Job {
-  id: string;
-  status: string;
-  preferred_date: string;
-  preferred_window: string | null;
-  scheduled_start_at: string | null;
-  zip: string;
-  address_line: string | null;
-  notes: string | null;
-  estimated_total_cents: number | null;
-  final_total_cents: number | null;
-  discount_cents?: number | null;
-  bedrooms?: number | null;
-  bathrooms?: number | null;
-  half_baths?: number | null;
-  supplies_provided?: number | null;
-  payment_status: string;
-  created_at: string;
-  service_name: string | null;
-  service_icon: string | null;
-  customer_name: string | null;
-  customer_phone: string | null;
+// A slot is bookable if the date is in the future, or (today) its start time
+// is at least MIN_LEAD_MINUTES from now.
+function isSlotAvailable(dateStr: string, slot: string): boolean {
+  if (!dateStr) return true;
+  if (dateStr > todayStr()) return true;
+  if (dateStr < todayStr()) return false;
+  const now = new Date();
+  const earliest = now.getHours() * 60 + now.getMinutes() + MIN_LEAD_MINUTES;
+  return slotHour24(slot) * 60 >= earliest;
 }
 
-interface EarningsResponse {
-  period: Period;
-  period_start: string;
-  period_totals: { jobs: number; gross_cents: number };
-  lifetime_totals: { jobs: number; gross_cents: number };
-  pending: { jobs: number; gross_cents: number };
-  recent_completions: Array<{
-    id: string;
-    preferred_date: string;
-    amount_cents: number;
-    service_name: string | null;
-    customer_name: string | null;
-  }>;
+const STEP_NAMES = ["Choose Service","Home Size","Add-Ons","Frequency","Date & Time","Your Address","Contact Info","Payment","Review & Confirm"];
+
+function defaultState(): BookingState {
+  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"",payConfirmed:false,clientSecret:null,promoCode:"",promoDiscount:0,promoStatus:"idle",promoMessage:"" };
 }
 
-export default function ProPage() {
+// ── Main component ─────────────────────────────────────────────────────
+function BookPageInner() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [authed, setAuthed] = useState<boolean | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [accessToken, setAccessToken] = useState<string>("");
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("offers");
-  const [offerCount, setOfferCount] = useState(0);
+  const searchParams = useSearchParams();
+  const preferredProId = searchParams?.get("pro") ?? null;
+  const preferredProName = searchParams?.get("name") ?? null;
+  const [step, setStep] = useState(1);
+  const [state, setState] = useState<BookingState>(defaultState);
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+  const [showSuppliesModal, setShowSuppliesModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [confirmData, setConfirmData] = useState<{ bookingId: string; price: number } | null>(null);
 
-  // Poll for new offers every 30s while the dashboard is open. When the count
-  // rises, fire a free browser notification (no Twilio needed) and update the
-  // page title so a background tab shows the alert too.
+  // Pre-fill from URL params
   useEffect(() => {
-    if (!accessToken) return;
-    let prev = -1; // -1 = first poll, don't notify on initial load
-    let stopped = false;
-
-    async function poll() {
-      try {
-        const resp = await fetch(`${API_BASE}/api/pros/me/offers`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!resp.ok || stopped) return;
-        const body = await resp.json();
-        const list = Array.isArray(body?.data) ? body.data : body?.data?.offers ?? [];
-        const n = list.length;
-        setOfferCount(n);
-        document.title = n > 0 ? `(${n}) New offers — BubbleBox Pro` : "BubbleBox Pro";
-        if (prev >= 0 && n > prev && typeof Notification !== "undefined" && Notification.permission === "granted") {
-          new Notification("New cleaning offer! 🫧", {
-            body: "A job in your area is up for grabs. First to accept gets it.",
-            icon: "/icons/icon-192.png",
-            tag: "bubblebox-offer",
-          });
-        }
-        prev = n;
-      } catch {
-        // transient network error — next poll will retry
-      }
+    const zip = searchParams.get("zip");
+    const service = searchParams.get("service") as ServiceId | null;
+    if (zip || service) {
+      setState(s => ({ ...s, zip: zip ?? s.zip, service: service ?? s.service }));
+      if (service) setStep(2);
     }
-
-    poll();
-    const iv = setInterval(poll, 30_000);
-    return () => { stopped = true; clearInterval(iv); };
-  }, [accessToken]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function init() {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (cancelled) return;
-
-      if (!sessionData?.session) {
-        setAuthed(false);
-        setLoading(false);
-        return;
-      }
-
-      setAuthed(true);
-      setUserEmail(sessionData.session.user?.email || "");
-      setAccessToken(sessionData.session.access_token);
-
-      try {
-        const resp = await fetch(`${API_BASE}/api/pros/me`, {
-          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
-        });
-        const body = await resp.json();
-        if (cancelled) return;
-        if (!resp.ok) {
-          setError(body?.error?.message || `Couldn't load your account (${resp.status})`);
-          setErrorCode(body?.error?.code || null);
-        } else {
-          setMe(body.data as MeResponse);
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Couldn't reach the server.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    init();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
-        setAuthed(false);
-        setMe(null);
-        setAccessToken("");
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      sub.subscription.unsubscribe();
-    };
   }, []);
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.push("/");
+  // Subtotal BEFORE promo discount (used for promo validation against backend)
+  function calcSubtotal() {
+    if (!state.service) return 0;
+    let base = BASE_PRICES[state.service] || 0;
+    base += (state.bedrooms - 1) * BED_PRICE;
+    base += (state.bathrooms - 1) * BATH_PRICE;
+    base += state.halfBaths * HALF_BATH;
+    state.addons.forEach(a => { base += ADDON_PRICES[a] || 0; });
+    return Math.round(base * (1 - (FREQ_DISCOUNTS[state.frequency] || 0)));
   }
 
-  // ── Not signed in ─────────────────────────────────────────────
-  if (!loading && authed === false) {
+  // Final total AFTER promo discount
+  function calcTotal() {
+    const subtotal = calcSubtotal();
+    if (state.promoStatus !== "valid") return subtotal;
+    return Math.max(0, subtotal - Math.round(state.promoDiscount / 100));
+  }
+
+  function update(patch: Partial<BookingState>) {
+    setState(s => ({ ...s, ...patch }));
+  }
+
+  function toggleAddon(id: string) {
+    if (id === "ownsupplies" && !state.addons.has(id)) { setShowSuppliesModal(true); return; }
+    const next = new Set(state.addons);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    update({ addons: next });
+  }
+
+  function validateStep() {
+    switch (step) {
+      case 8: return state.payConfirmed;
+      case 1: return !!state.service;
+      case 5: return !!state.date && !!state.time && isSlotAvailable(state.date, state.time);
+      case 6: return state.address.trim().length >= 5 && state.zip.length === 5;
+      case 7: return state.firstName.trim().length >= 1 && state.lastName.trim().length >= 1 && state.email.includes("@") && toE164USPhone(state.phone) !== null;
+      default: return true;
+    }
+  }
+
+  async function handleConfirm() {
+    const phoneE164 = toE164USPhone(state.phone);
+    if (!phoneE164) { setServerError("Please enter a valid US phone number."); return; }
+
+    setSubmitting(true);
+    setServerError(null);
+
+    const addressLine = [state.address, state.apt].filter(Boolean).join(", ");
+    const addonNames = [...state.addons].filter(id => id !== "ownsupplies").map(id => ADDONS.find(a => a.id === id)?.name).filter(Boolean);
+    // Job scope, stated first so the cleaner sees it before anything else.
+    // The API has no bedroom/bathroom fields, so this line is how room counts
+    // and the supplies decision reach admin, the job card, and pro emails.
+    const scopeNote = [
+      `${state.bedrooms} bed`,
+      `${state.bathrooms} bath`,
+      state.halfBaths ? `${state.halfBaths} half-bath` : "",
+      state.frequency !== "once" ? `${state.frequency} service` : "",
+    ].filter(Boolean).join(", ");
+    const suppliesNote = state.addons.has("ownsupplies")
+      ? "SUPPLIES: customer provides ($10 discount applied)."
+      : "SUPPLIES: cleaner brings all supplies.";
+    const promoNote = state.promoStatus === "valid" ? `Promo code ${state.promoCode} applied ($${Math.round(state.promoDiscount / 100)} off).` : "";
+    const notes = [scopeNote, suppliesNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : "", state.specialInstructions, promoNote, `Total: $${calcTotal()}`].filter(Boolean).join(" | ");
+
+    const windowMap: Record<string,Window> = { "8:00 AM":"morning","9:00 AM":"morning","10:00 AM":"morning","11:00 AM":"morning","12:00 PM":"afternoon","1:00 PM":"afternoon","2:00 PM":"afternoon","3:00 PM":"afternoon","4:00 PM":"afternoon","5:00 PM":"evening","6:00 PM":"evening","7:00 PM":"evening","8:00 PM":"evening" };
+
+    try {
+      const res = await createBooking({
+        // Send the PRE-promo subtotal. The backend applies the promo itself
+        // (it stores discount_cents and computes final_total_cents), so
+        // sending the discounted figure here would apply it twice.
+        estimated_total_cents: calcSubtotal() * 100,
+        service_id: state.service!,
+        zip: state.zip,
+        preferred_date: state.date,
+        preferred_window: windowMap[state.time] || "morning",
+        address_line: addressLine,
+        notes: notes || undefined,
+        customer: { name: `${state.firstName} ${state.lastName}`.trim(), phone: phoneE164, email: state.email || undefined },
+        promo_code: state.promoStatus === "valid" ? state.promoCode : undefined,
+        bedrooms: state.bedrooms,
+        bathrooms: state.bathrooms,
+        half_baths: state.halfBaths,
+        supplies_provided: state.addons.has("ownsupplies"),
+        frequency: state.frequency,
+      });
+
+      try { sessionStorage.setItem(`booking-phone-${res.id}`, phoneE164); } catch {}
+      if (preferredProId) {
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.bubbleboxatl.com"}/api/bookings/${res.id}/prefer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phoneE164, pro_id: preferredProId }),
+        }).catch(() => {});
+      }
+
+      // Attach Stripe payment intent to the booking
+      if (state.clientSecret) {
+        const pi = state.clientSecret.split("_secret_")[0];
+        fetch(`${STRIPE_API_BASE}/api/payments/attach-to-booking`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ booking_id: res.id, payment_intent_id: pi }),
+        }).catch(() => {});
+      }
+      setConfirmData({ bookingId: res.id, price: calcTotal() });
+      setConfirmed(true);
+    } catch (err) {
+      if (err instanceof BookingError) {
+        setServerError(err.details?.length ? "Some details look off: " + err.details.map(d => d.message).join(", ") : err.message);
+      } else {
+        setServerError("Couldn't reach the booking server. Check your connection and try again.");
+      }
+    } finally { setSubmitting(false); }
+  }
+
+  // ── Confirmation screen ────────────────────────────────────────────
+  if (confirmed && confirmData) {
     return (
-      <div className="page">
-        <Topbar />
-        <main className="shell signin-shell">
-          <div className="signin-card">
-            <div className="signin-icon">🔒</div>
-            <h1 className="signin-title">Cleaner sign-in required</h1>
-            <p className="signin-sub">
-              You need to sign in as an approved BubbleBox cleaner to access this dashboard.
-            </p>
-            <Link href="/login" className="btn-primary signin-cta">
-              Sign in
-            </Link>
-            <div className="signin-foot">
-              Want to become a BubbleBox cleaner?{" "}
-              <Link href="/join" className="link">Apply here</Link>
-            </div>
+      <div style={{ minHeight: "100vh", background: "var(--color-paper)", fontFamily: "var(--font-sans)" }}>
+        <AppHeader />
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 64, marginBottom: 16, animation: "bounce 0.6s ease" }}>🎉</div>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.5px", marginBottom: 8 }}>You're all booked!</h1>
+          <p style={{ fontSize: 15, color: "var(--color-ink-mid)", lineHeight: 1.5, marginBottom: 28, maxWidth: 320, margin: "0 auto 28px" }}>
+            Thank you, {state.firstName}! We'll reach out to confirm your appointment shortly.
+          </p>
+          <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: 20, maxWidth: 400, margin: "0 auto 24px", textAlign: "left", boxShadow: "var(--shadow-card)" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 14 }}>Booking Summary</div>
+            <SummaryRow label="Confirmation #" value={<span style={{ fontFamily: "monospace", fontSize: 12 }}>{confirmData.bookingId.toUpperCase()}</span>} />
+            <SummaryRow label="Date" value={`${state.date ? new Date(state.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—"} · ${state.time}`} />
+            <SummaryRow label="Address" value={`${state.address}${state.apt ? ", " + state.apt : ""}, ${state.city}, ${state.stateCode} ${state.zip}`} />
+            <SummaryRow label="Total" value={<span style={{ color: "var(--color-accent)", fontSize: 17 }}>${confirmData.price}</span>} />
           </div>
-        </main>
-        <PageStyles />
-      </div>
-    );
-  }
-
-  // ── Loading ───────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="page">
-        <Topbar />
-        <main className="shell">
-          <div className="loading">Loading your dashboard…</div>
-        </main>
-        <PageStyles />
-      </div>
-    );
-  }
-
-  // ── Error: not a pro (covers "no pros row" cases) ─────────────
-  if (errorCode === "not_a_pro") {
-    return (
-      <div className="page">
-        <Topbar onSignOut={handleSignOut} />
-        <main className="shell signin-shell">
-          <div className="signin-card">
-            <div className="signin-icon">🧽</div>
-            <h1 className="signin-title">Not a cleaner account</h1>
-            <p className="signin-sub">
-              This page is for approved BubbleBox cleaners. If you applied recently, your
-              application may still be pending review. Questions? Email{" "}
-              <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
-            </p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <Link href="/" className="btn-outline">Go home</Link>
-              <Link href="/join" className="btn-primary">Apply now</Link>
-            </div>
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#15803d", fontWeight: 600, maxWidth: 400, margin: "0 auto 24px" }}>
+            📋 Screenshot this page for your records.
           </div>
-        </main>
-        <PageStyles />
+          <button onClick={() => { setState(defaultState()); setConfirmed(false); setConfirmData(null); setStep(1); }} style={btnPrimary}>Book Another Cleaning</button>
+        </div>
+        <style>{`@keyframes bounce{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}`}</style>
       </div>
     );
   }
 
-  // ── Other error ────────────────────────────────────────────────
-  if (error) {
-    return (
-      <div className="page">
-        <Topbar onSignOut={handleSignOut} />
-        <main className="shell">
-          <div className="error-card">
-            <div className="error-icon">⚠️</div>
-            <div className="error-title">Couldn't load your dashboard</div>
-            <div className="error-sub">{error}</div>
-            <button className="btn-primary" onClick={() => window.location.reload()}>
-              Try again
-            </button>
-          </div>
-        </main>
-        <PageStyles />
-      </div>
-    );
-  }
-
-  // ── Main view ──────────────────────────────────────────────────
-  const pro = me!.pro;
-  const activity = me!.activity;
-  const firstName = pro.full_name.split(" ")[0] || "there";
+  const price = calcTotal();
+  const subtotal = calcSubtotal();
+  const showPriceBar = step <= 9;
+  const hasPromo = state.promoStatus === "valid" && state.promoDiscount > 0;
 
   return (
-    <div className="page">
-      <Topbar onSignOut={handleSignOut} />
+    <div style={{ minHeight: "100dvh", background: "var(--color-paper)", fontFamily: "var(--font-sans)", display: "flex", flexDirection: "column" }}>
+      <AppHeader />
 
-      <div className="hero">
-        <div className="hero-inner">
-          <div className="hero-row">
-            <div>
-              <h1 className="greeting">Welcome back, {firstName}</h1>
-              <p className="greeting-sub">
-                {activity.active_jobs > 0
-                  ? `You have ${activity.active_jobs} active ${
-                      activity.active_jobs === 1 ? "job" : "jobs"
-                    }`
-                  : "No active jobs right now"}
-              </p>
-            </div>
-            <div className="hero-stats">
-              <div className="hero-stat">
-                <div className="hero-stat-value">{activity.completed_jobs}</div>
-                <div className="hero-stat-label">Jobs done</div>
-              </div>
-              <div className="hero-stat">
-                <div className="hero-stat-value">
-                  {pro.avg_rating > 0 ? pro.avg_rating.toFixed(1) : "—"}
-                </div>
-                <div className="hero-stat-label">Rating</div>
-              </div>
-              <div className="hero-stat">
-                <div className="hero-stat-value">
-                  ${Math.round((activity.lifetime_earnings_cents * PRO_SHARE) / 100).toLocaleString()}
-                </div>
-                <div className="hero-stat-label">Earned</div>
-              </div>
-            </div>
-          </div>
+      {/* Progress */}
+      <div style={{ background: "white", padding: "10px 20px 14px", borderBottom: "1px solid var(--color-rule)" }} id="progressWrap">
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>
+          <span>Step {step} of {STEP_NAMES.length}</span>
+          <span>{STEP_NAMES[step - 1]}</span>
+        </div>
+        <div style={{ height: 5, background: "var(--color-surface-mid)", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ height: "100%", background: "linear-gradient(90deg, var(--color-accent) 0%, var(--color-accent-light) 100%)", borderRadius: 99, transition: "width 0.4s cubic-bezier(0.34,1.56,0.64,1)", width: `${(step / STEP_NAMES.length) * 100}%` }} />
+        </div>
+        <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>
+          {STEP_NAMES.map((_, i) => (
+            <div key={i} style={{ height: 6, borderRadius: 99, background: i + 1 === step ? "var(--color-accent)" : i + 1 < step ? "var(--color-accent-light)" : "var(--color-surface-mid)", transition: "all 0.3s", width: i + 1 === step ? 18 : 6 }} />
+          ))}
         </div>
       </div>
 
-      <nav className="tabs">
-        <button
-          className={`tab ${tab === "offers" ? "active" : ""}`}
-          onClick={() => setTab("offers")}
-        >
-          Offers
-          {offerCount > 0 && <span className="tab-badge pulse">{offerCount}</span>}
-        </button>
-        <button
-          className={`tab ${tab === "jobs" ? "active" : ""}`}
-          onClick={() => setTab("jobs")}
-        >
-          Jobs
-          {activity.active_jobs > 0 && <span className="tab-badge">{activity.active_jobs}</span>}
-        </button>
-        <button
-          className={`tab ${tab === "earnings" ? "active" : ""}`}
-          onClick={() => setTab("earnings")}
-        >
-          Earnings
-        </button>
-        <button
-          className={`tab ${tab === "profile" ? "active" : ""}`}
-          onClick={() => setTab("profile")}
-        >
-          Profile
-        </button>
-      </nav>
+      {/* Main content */}
+      {preferredProId && (
+        <div style={{ background: "#eff6ff", borderBottom: "1px solid #bfdbfe", padding: "10px 20px", textAlign: "center", fontSize: 13.5, fontWeight: 600, color: "#1e40af" }}>
+          🔁 Requesting {preferredProName || "your previous cleaner"} — they get first chance to accept this job
+        </div>
+      )}
+      <main style={{ flex: 1, padding: "24px 20px 140px", maxWidth: 640, margin: "0 auto", width: "100%", animation: "stepIn 0.3s ease" }}>
+        {step === 1 && <Step1 state={state} update={update} />}
+        {step === 2 && <Step2 state={state} update={update} />}
+        {step === 3 && <Step3 state={state} toggleAddon={toggleAddon} showSuppliesModal={showSuppliesModal} setShowSuppliesModal={setShowSuppliesModal} setState={setState} />}
+        {step === 4 && <Step4 state={state} update={update} />}
+        {step === 5 && <Step5 state={state} update={update} calYear={calYear} calMonth={calMonth} setCalYear={setCalYear} setCalMonth={setCalMonth} />}
+        {step === 6 && <Step6 state={state} update={update} />}
+        {step === 7 && <Step7 state={state} update={update} />}
+        {step === 8 && <Step8 state={state} update={update} calcTotal={calcTotal} calcSubtotal={calcSubtotal} />}
+        {step === 9 && <Step9 state={state} calcTotal={calcTotal} calcSubtotal={calcSubtotal} goToStep={setStep} />}
 
-      <main className="shell">
-        {tab === "offers" && (
-          <OffersTab
-            accessToken={accessToken}
-            onCountChange={setOfferCount}
-            onAccepted={() => setTab("jobs")}
-          />
+        {serverError && (
+          <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 14, color: "var(--color-danger)" }}>{serverError}</div>
         )}
-        {tab === "jobs" && <JobsTab accessToken={accessToken} />}
-        {tab === "earnings" && <EarningsTab accessToken={accessToken} />}
-        {tab === "profile" && <ProfileTab pro={pro} email={userEmail} accessToken={accessToken} />}
       </main>
 
-      <PageStyles />
+      {/* Price bar */}
+      {showPriceBar && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "white", borderTop: "1px solid var(--color-rule)", boxShadow: "0 -4px 24px rgba(29,127,232,0.10)", zIndex: 200 }}>
+          <div style={{ maxWidth: 640, margin: "0 auto", padding: "12px 20px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <button onClick={() => { if (step > 1) setStep(s => s - 1); setServerError(null); }} style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer", padding: "8px 0", display: "flex", alignItems: "center", gap: 4, visibility: step > 1 ? "visible" : "hidden" }}>
+              ← Back
+            </button>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Estimated Total</span>
+              {hasPromo ? (
+                <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "var(--color-muted)", textDecoration: "line-through" }}>${subtotal}</span>
+                  <span style={{ fontSize: 26, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.5px", lineHeight: 1 }}>${price}</span>
+                </div>
+              ) : (
+                <span style={{ fontSize: 26, fontWeight: 700, color: "var(--color-ink)", letterSpacing: "-0.5px", lineHeight: 1 }}>{price > 0 ? `$${price}` : "--"}</span>
+              )}
+              {hasPromo && <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 700 }}>${Math.round(state.promoDiscount / 100)} off ({state.promoCode})</span>}
+              {!hasPromo && state.frequency !== "once" && <span style={{ fontSize: 12, color: "var(--color-muted)" }}>per visit ({state.frequency})</span>}
+            </div>
+            <button
+              onClick={() => { if (step < 9 && validateStep()) setStep(s => s + 1); else if (step === 9) handleConfirm(); }}
+              disabled={!validateStep() || submitting}
+              style={{ ...btnNext, opacity: (!validateStep() || submitting) ? 0.5 : 1 }}
+            >
+              {step === 9 ? (submitting ? "Booking..." : "✓ Book Now") : "Continue →"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes stepIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+      `}</style>
     </div>
   );
 }
 
-// ── Topbar (header) ───────────────────────────────────────────────
-function Topbar({ onSignOut }: { onSignOut?: () => void }) {
+// ── Step components ────────────────────────────────────────────────────
+
+function Step1({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
   return (
-    <header className="topbar">
-      <Link href="/" className="topbar-logo">
-        <div className="topbar-name">BubbleBox ATL</div>
-        <div className="topbar-sub">Cleaner Dashboard</div>
-      </Link>
-      {onSignOut && (
-        <button onClick={onSignOut} className="signout-btn">Sign out</button>
+    <>
+      <StepHeader eyebrow="Step 1 — Service" title="What type of cleaning do you need?" sub="We serve Atlanta & Metro Atlanta. Select your service to get started." />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }} className="service-grid-book">
+        {SERVICES.map(s => {
+          const sel = state.service === s.id;
+          return (
+            <button key={s.id} onClick={() => update({ service: s.id as ServiceId })} style={{ background: sel ? "var(--color-accent)" : "white", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 16, padding: "18px 14px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 8, position: "relative", overflow: "hidden", transition: "all 0.2s", textAlign: "left" }}>
+              {sel && <div style={{ position: "absolute", top: 10, right: 10, width: 20, height: 20, background: "white", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width={12} height={12} viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--color-accent)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/></svg></div>}
+              <div style={{ fontSize: 30 }}>{s.icon}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: sel ? "white" : "var(--color-ink)" }}>{s.name}</div>
+              <div style={{ fontSize: 12, color: sel ? "rgba(255,255,255,0.75)" : "var(--color-muted)", lineHeight: 1.4 }}>{s.shortDescription}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginTop: "auto", color: sel ? "rgba(255,255,255,0.9)" : "var(--color-accent)" }}>From {formatPrice(s.basePriceCents)}</div>
+            </button>
+          );
+        })}
+      </div>
+      <style>{`@media(min-width:540px){.service-grid-book{grid-template-columns:repeat(3,1fr)!important}}`}</style>
+    </>
+  );
+}
+
+function Step2({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
+  return (
+    <>
+      <StepHeader eyebrow="Step 2 — Home Size" title="How big is your space?" sub="We'll price based on the number of rooms." />
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {[
+          { field:"bedrooms",label:"Bedrooms",sub:"Including master bedroom",min:1,max:10,val:state.bedrooms },
+          { field:"bathrooms",label:"Full Bathrooms",sub:"With tub or shower",min:0,max:10,val:state.bathrooms },
+          { field:"halfBaths",label:"Half Bathrooms",sub:"Toilet & sink only",min:0,max:5,val:state.halfBaths },
+        ].map(({ field, label, sub, min, max, val }) => (
+          <div key={field} style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-ink)" }}>{label}</div>
+              <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>{sub}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button disabled={val <= min} onClick={() => update({ [field]: val - 1 } as any)} style={{ width: 36, height: 36, borderRadius: "50%", border: "2px solid var(--color-rule)", background: "white", cursor: val <= min ? "not-allowed" : "pointer", fontSize: 20, fontWeight: 600, color: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", opacity: val <= min ? 0.35 : 1, transition: "all 0.15s" }}>−</button>
+              <span style={{ fontSize: 20, fontWeight: 700, color: "var(--color-ink)", minWidth: 28, textAlign: "center" }}>{val}</span>
+              <button disabled={val >= max} onClick={() => update({ [field]: val + 1 } as any)} style={{ width: 36, height: 36, borderRadius: "50%", border: "2px solid var(--color-rule)", background: "white", cursor: val >= max ? "not-allowed" : "pointer", fontSize: 20, fontWeight: 600, color: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", opacity: val >= max ? 0.35 : 1, transition: "all 0.15s" }}>+</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Step3({ state, toggleAddon, showSuppliesModal, setShowSuppliesModal, setState }: any) {
+  return (
+    <>
+      <StepHeader eyebrow="Step 3 — Add-Ons" title="Want anything extra?" sub="Optional extras added to your cleaning. You can skip this step." />
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {ADDONS.map(a => {
+          const sel = state.addons.has(a.id);
+          return (
+            <div key={a.id} onClick={() => toggleAddon(a.id)} style={{ background: sel ? (a.discount ? "#dcfce7" : "var(--color-surface)") : (a.discount ? "#f0fdf4" : "white"), border: `2px solid ${sel ? (a.discount ? "#16a34a" : "var(--color-accent)") : (a.discount ? "#bbf7d0" : "var(--color-rule)")}`, borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", transition: "all 0.2s" }}>
+              <div style={{ fontSize: 22, width: 32, textAlign: "center" }}>{a.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: a.discount ? "#15803d" : "var(--color-ink)" }}>{a.name}</div>
+                <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>{a.desc}</div>
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: a.discount ? "#16a34a" : "var(--color-accent)", whiteSpace: "nowrap" }}>{a.price}</div>
+              <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${sel ? (a.discount ? "#16a34a" : "var(--color-accent)") : "var(--color-rule)"}`, background: sel ? (a.discount ? "#16a34a" : "var(--color-accent)") : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
+                {sel && <svg width={10} height={7} viewBox="0 0 10 7" fill="none"><path d="M1 3.5l3 3 5-5" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Supplies modal */}
+      {showSuppliesModal && (
+        <div onClick={() => setShowSuppliesModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(13,27,62,0.5)", zIndex: 500, display: "flex", alignItems: "flex-end", justifyContent: "center", animation: "fadeIn 0.2s ease" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "white", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto", animation: "slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)" }}>
+            <div style={{ width: 40, height: 4, background: "var(--color-rule)", borderRadius: 99, margin: "0 auto 20px" }} />
+            <div style={{ fontSize: 20, fontWeight: 700, color: "var(--color-ink)", marginBottom: 6 }}>🧴 Confirm Your Supplies</div>
+            <div style={{ fontSize: 14, color: "var(--color-ink-mid)", marginBottom: 20, lineHeight: 1.5 }}>To qualify for the $10 discount, please confirm you have all of the following available for our cleaner:</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+              {[["🧹","All-purpose cleaner"],["🚽","Bathroom disinfectant"],["🪟","Glass cleaner"],["🪣","Mop & bucket"],["🧹","Vacuum cleaner"],["🪥","Toilet brush"],["🧽","Towels & sponges"],["🧹","Broom & dustpan"]].map(([icon,item]) => (
+                <div key={item} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)", borderRadius: 10, padding: "12px 14px", fontSize: 14, fontWeight: 500 }}>
+                  <span style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{icon}</span>{item}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button onClick={() => { setState((s: BookingState) => { const a = new Set(s.addons); a.add("ownsupplies"); return { ...s, addons: a }; }); setShowSuppliesModal(false); }} style={{ background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 15, fontSize: 16, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 16px rgba(29,127,232,0.30)" }}>
+                ✅ Yes, I have all of these — Apply $10 Off
+              </button>
+              <button onClick={() => setShowSuppliesModal(false)} style={{ background: "none", border: "2px solid var(--color-rule)", borderRadius: 50, padding: 13, fontSize: 15, fontWeight: 600, color: "var(--color-ink-mid)", cursor: "pointer" }}>
+                I don't have everything — Skip discount
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+    </>
+  );
+}
+
+function Step4({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
+  return (
+    <>
+      <StepHeader eyebrow="Step 4 — Frequency" title="How often should we visit?" sub="Recurring plans save you money on every visit." />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {FREQUENCIES.map(f => {
+          const sel = state.frequency === f.id;
+          return (
+            <div key={f.id} onClick={() => update({ frequency: f.id })} style={{ background: sel ? "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)" : "white", border: `2px solid ${sel ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 16, padding: "20px 16px", cursor: "pointer", textAlign: "center", transition: "all 0.2s", position: "relative", boxShadow: sel ? "0 6px 24px rgba(29,127,232,0.35)" : "none" }}>
+              {f.discount && <div style={{ display: "inline-block", background: "#FFD700", color: "#7A5700", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99, marginBottom: 8, letterSpacing: "0.3px" }}>{f.discount}</div>}
+              {!f.discount && <div style={{ height: 20 }} />}
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{f.icon}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: sel ? "white" : "var(--color-ink)" }}>{f.name}</div>
+              <div style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.4, color: sel ? "white" : "var(--color-ink-mid)" }}>{f.desc}</div>
+              {f.discount && <div style={{ fontSize: 13, fontWeight: 700, color: "#FFD700", marginTop: 8 }}>{f.discount}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function Step5({ state, update, calYear, calMonth, setCalYear, setCalMonth }: any) {
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const days = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  function prevMonth() { if (calMonth === 0) { setCalMonth(11); setCalYear((y: number) => y - 1); } else setCalMonth((m: number) => m - 1); }
+  function nextMonth() { if (calMonth === 11) { setCalMonth(0); setCalYear((y: number) => y + 1); } else setCalMonth((m: number) => m + 1); }
+
+  return (
+    <>
+      <StepHeader eyebrow="Step 5 — Schedule" title="Pick your date & time" sub="Select any available date — we'll confirm within 2 hours." />
+      <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-soft)" }}>
+        <div style={{ background: "var(--color-accent)", color: "white", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <button onClick={prevMonth} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{months[calMonth]} {calYear}</div>
+          <button onClick={nextMonth} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", padding: "0 4px 8px" }}>
+          {days.map(d => <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--color-muted)", padding: "10px 4px 6px", letterSpacing: "0.5px" }}>{d}</div>)}
+          {Array.from({ length: firstDay }, (_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }, (_, i) => {
+            const d = i + 1;
+            const dateStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const date = new Date(calYear, calMonth, d);
+            const isPast = date < today;
+            const isSel = state.date === dateStr;
+            const isToday = date.getTime() === today.getTime();
+            return (
+              <div key={d} onClick={() => !isPast && update({ date: dateStr, ...(state.time && !isSlotAvailable(dateStr, state.time) ? { time: "" } : {}) })} style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: isPast ? "not-allowed" : "pointer", borderRadius: "50%", margin: 3, fontWeight: 500, background: isSel ? "var(--color-accent)" : "transparent", color: isPast ? "var(--color-rule)" : isSel ? "white" : "var(--color-ink)", border: isToday && !isSel ? "2px solid var(--color-accent-light)" : "2px solid transparent", boxShadow: isSel ? "0 2px 8px rgba(29,127,232,0.4)" : "none", transition: "all 0.15s" }}>
+                {d}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)", marginBottom: 10 }}>Available arrival windows:</div>
+        {state.date === todayStr() && !TIME_SLOTS.some(t => isSlotAvailable(state.date, t)) && (
+          <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "var(--color-accent-mid)", fontWeight: 500, marginBottom: 10 }}>
+            Same-day booking is closed for today — cleaners need at least 2 hours&apos; notice. Pick tomorrow or later!
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {TIME_SLOTS.map(t => {
+            const sel = state.time === t;
+            const avail = isSlotAvailable(state.date, t);
+            return (
+              <div key={t} onClick={() => avail && update({ time: t })} style={{ background: !avail ? "var(--color-surface)" : sel ? "var(--color-accent)" : "white", border: `2px solid ${sel && avail ? "var(--color-accent)" : "var(--color-rule)"}`, borderRadius: 10, padding: "10px 6px", textAlign: "center", cursor: avail ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 600, color: !avail ? "var(--color-rule)" : sel ? "white" : "var(--color-ink)", textDecoration: !avail ? "line-through" : "none", transition: "all 0.15s" }}>
+                {t}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Step6({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
+  function useGPS() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`);
+        const d = await r.json();
+        const addr = d.address || {};
+        update({ address: ((addr.house_number || "") + " " + (addr.road || "")).trim(), city: addr.city || addr.town || addr.village || "Atlanta", zip: addr.postcode || "" });
+      } catch {}
+    });
+  }
+
+  return (
+    <>
+      <StepHeader eyebrow="Step 6 — Address" title="Where should we go?" sub="We serve Atlanta & Metro Atlanta only." />
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--color-surface)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "var(--color-accent-mid)", fontWeight: 500 }}>
+          📍 Service area: Atlanta, Buckhead, Midtown, Decatur, Sandy Springs, Alpharetta, Marietta, Smyrna & more.
+        </div>
+        <button onClick={useGPS} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--color-surface)", color: "var(--color-accent)", border: "2px solid var(--color-surface-mid)", borderRadius: 10, padding: "11px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>
+          📡 Use My Current Location
+        </button>
+        <TextInput label="Street Address" placeholder="123 Peachtree St NW" value={state.address} onChange={v => update({ address: v })} required />
+        <TextInput label="Apt / Suite / Unit (optional)" placeholder="Apt 4B" value={state.apt} onChange={v => update({ apt: v })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <TextInput label="City" placeholder="Atlanta" value={state.city} onChange={v => update({ city: v })} />
+          <TextInput label="ZIP Code" placeholder="30308" value={state.zip} onChange={v => update({ zip: v.replace(/\D/g,"").slice(0,5) })} inputMode="numeric" />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)" }}>State</label>
+          <select value={state.stateCode} onChange={e => update({ stateCode: e.target.value })} style={{ width: "100%", padding: "13px 14px", border: "2px solid var(--color-rule)", borderRadius: 10, fontSize: 15, color: "var(--color-ink)", background: "white", outline: "none" }}>
+            <option value="GA">Georgia (GA)</option>
+          </select>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)" }}>Special Instructions (optional)</label>
+          <textarea value={state.specialInstructions} onChange={e => update({ specialInstructions: e.target.value })} placeholder="Gate code, pet info, parking notes…" rows={3} style={{ width: "100%", padding: "12px 14px", border: "2px solid var(--color-rule)", borderRadius: 10, fontSize: 15, color: "var(--color-ink)", background: "white", outline: "none", resize: "vertical", fontFamily: "inherit" }} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Step7({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
+  return (
+    <>
+      <StepHeader eyebrow="Step 7 — Contact" title="Who should we contact?" sub="We'll send your confirmation and updates here." />
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <TextInput label="First Name" placeholder="Jane" value={state.firstName} onChange={v => update({ firstName: v })} autoComplete="given-name" />
+          <TextInput label="Last Name" placeholder="Smith" value={state.lastName} onChange={v => update({ lastName: v })} autoComplete="family-name" />
+        </div>
+        <TextInput label="Email Address" placeholder="jane@email.com" value={state.email} onChange={v => update({ email: v })} type="email" autoComplete="email" />
+        <TextInput label="Phone Number" placeholder="(404) 555-0123" value={state.phone} onChange={v => update({ phone: v })} type="tel" inputMode="tel" autoComplete="tel" />
+      </div>
+    </>
+  );
+}
+
+function Step8({ state, update, calcTotal, calcSubtotal }: { state: BookingState; update: (p: Partial<BookingState>) => void; calcTotal: () => number; calcSubtotal: () => number }) {
+  const [secretLoading, setSecretLoading] = useState(false);
+  const [secretError, setSecretError] = useState<string | null>(null);
+
+  // Re-create the client secret whenever the total changes (e.g. after applying/removing a promo)
+  useEffect(() => {
+    if (state.clientSecret) return;
+    const total = calcTotal();
+    if (total <= 0) return;
+    setSecretLoading(true);
+    fetch(`${STRIPE_API_BASE}/api/payments/create-intent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount_cents: total * 100,
+        customer_email: state.email || undefined,
+        customer_name: `${state.firstName} ${state.lastName}`.trim() || undefined,
+        promo_code: state.promoStatus === "valid" ? state.promoCode : undefined,
+      }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data?.client_secret) update({ clientSecret: j.data.client_secret });
+        else setSecretError("Couldn't initialize payment. Please try again.");
+      })
+      .catch(() => setSecretError("Couldn't reach payment server."))
+      .finally(() => setSecretLoading(false));
+  }, [state.clientSecret]);
+
+  const subtotal = calcSubtotal();
+  const total = calcTotal();
+  const hasPromo = state.promoStatus === "valid" && state.promoDiscount > 0;
+
+  return (
+    <>
+      <StepHeader eyebrow="Step 8 — Payment" title="Payment details" sub="A pre-authorization hold is placed on your card at booking. You are fully charged only after your cleaning is complete." />
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+        <PromoInput state={state} update={update} calcSubtotal={calcSubtotal} />
+
+        <div style={{ background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)", borderRadius: 16, padding: "16px 18px" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Order Summary</div>
+          {hasPromo ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: "var(--color-ink-mid)", marginBottom: 4 }}>
+                <span>Subtotal</span>
+                <span>${subtotal}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: "#16a34a", marginBottom: 10, fontWeight: 600 }}>
+                <span>Promo ({state.promoCode})</span>
+                <span>−${Math.round(state.promoDiscount / 100)}</span>
+              </div>
+              <div style={{ borderTop: "1px solid var(--color-surface-mid)", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
+                <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-accent)" }}>${total}</span>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-accent)" }}>${total}</span>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#15803d", fontWeight: 600 }}>
+          🔒 Secure checkout — Stripe-encrypted. Pre-auth hold only; you won't be charged until service is complete.
+        </div>
+
+        {secretLoading && <div style={{ textAlign: "center", padding: 24, color: "var(--color-muted)" }}>Loading payment form…</div>}
+        {secretError && <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 14, color: "var(--color-danger)" }}>{secretError}</div>}
+
+        {state.clientSecret && stripePromise && (
+          <Elements stripe={stripePromise} options={{ clientSecret: state.clientSecret, appearance: { theme: "stripe" } }}>
+            <StripePayInner state={state} update={update} />
+          </Elements>
+        )}
+
+        {state.payConfirmed && (
+          <div style={{ padding: "12px 16px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, fontSize: 14, color: "#15803d", fontWeight: 600, textAlign: "center" }}>
+            ✅ Payment method confirmed — you can continue to review.
+          </div>
+        )}
+
+        <div style={{ fontSize: 11, color: "var(--color-muted)", textAlign: "center", padding: "4px 0" }}>
+          By completing your booking you agree to our <Link href="/terms" style={{ color: "var(--color-accent)" }}>Terms of Service</Link> & <Link href="/privacy" style={{ color: "var(--color-accent)" }}>Privacy Policy</Link>.
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PromoInput({ state, update, calcSubtotal }: { state: BookingState; update: (p: Partial<BookingState>) => void; calcSubtotal: () => number }) {
+  const [applying, setApplying] = useState(false);
+
+  async function apply() {
+    const code = state.promoCode.trim().toUpperCase();
+    if (!code) return;
+    setApplying(true);
+    try {
+      const result = await validatePromo({
+        code,
+        subtotal_cents: calcSubtotal() * 100,
+        customer_email: state.email || undefined,
+        customer_phone: toE164USPhone(state.phone) || undefined,
+      });
+      update({
+        promoCode: code,
+        promoDiscount: result.discount_cents,
+        promoStatus: "valid",
+        promoMessage: result.message,
+        clientSecret: null, // force payment intent re-creation with new amount
+        payConfirmed: false, // user needs to re-confirm payment at new amount
+      });
+    } catch (err) {
+      const msg = err instanceof PromoError ? err.message : "Couldn't validate code. Try again.";
+      update({ promoDiscount: 0, promoStatus: "invalid", promoMessage: msg });
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function clear() {
+    update({
+      promoCode: "",
+      promoDiscount: 0,
+      promoStatus: "idle",
+      promoMessage: "",
+      clientSecret: null, // force payment intent re-creation at full price
+      payConfirmed: false,
+    });
+  }
+
+  return (
+    <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Promo Code</div>
+      {state.promoStatus === "valid" ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#15803d" }}>✓ {state.promoCode} applied</div>
+            <div style={{ fontSize: 12, color: "var(--color-muted)" }}>{state.promoMessage}</div>
+          </div>
+          <button onClick={clear} style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}>Remove</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text"
+              placeholder="Promo code (optional)"
+              value={state.promoCode}
+              onChange={e => update({ promoCode: e.target.value.toUpperCase(), promoStatus: "idle", promoMessage: "" })}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
+              style={{ flex: 1, padding: "11px 12px", border: "2px solid var(--color-rule)", borderRadius: 10, fontSize: 14, color: "var(--color-ink)", background: "white", outline: "none", textTransform: "uppercase", fontFamily: "inherit" }}
+            />
+            <button
+              onClick={apply}
+              disabled={!state.promoCode.trim() || applying}
+              style={{ background: "var(--color-accent)", color: "white", border: "none", borderRadius: 10, padding: "0 18px", fontSize: 14, fontWeight: 700, cursor: applying ? "wait" : "pointer", opacity: (!state.promoCode.trim() || applying) ? 0.5 : 1, fontFamily: "inherit" }}
+            >
+              {applying ? "..." : "Apply"}
+            </button>
+          </div>
+          {state.promoStatus === "invalid" && (
+            <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-danger)" }}>{state.promoMessage}</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function StripePayInner({ state, update }: { state: BookingState; update: (p: Partial<BookingState>) => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function confirm() {
+    if (!stripe || !elements) return;
+    setSubmitting(true); setErr(null);
+    const { error: submitError } = await elements.submit();
+    if (submitError) { setErr(submitError.message || "Card error"); setSubmitting(false); return; }
+    const result = await stripe.confirmPayment({
+      elements,
+      clientSecret: state.clientSecret!,
+      confirmParams: { return_url: window.location.href },
+      redirect: "if_required",
+    });
+    if (result.error) { setErr(result.error.message || "Payment failed"); setSubmitting(false); return; }
+    update({ payConfirmed: true });
+    setSubmitting(false);
+  }
+
+  return (
+    <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 12, padding: 16 }}>
+      <PaymentElement />
+      {err && <div style={{ marginTop: 10, fontSize: 13, color: "var(--color-danger)" }}>{err}</div>}
+      {!state.payConfirmed && (
+        <button onClick={confirm} disabled={!stripe || submitting} style={{ marginTop: 14, width: "100%", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 14, fontSize: 15, fontWeight: 700, cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.6 : 1, fontFamily: "inherit" }}>
+          {submitting ? "Validating…" : "Confirm Payment Method"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Step9({ state, calcTotal, calcSubtotal, goToStep }: { state: BookingState; calcTotal: () => number; calcSubtotal: () => number; goToStep: (n: number) => void }) {
+  const svc = SERVICES.find(s => s.id === state.service);
+  const freq = FREQUENCIES.find(f => f.id === state.frequency);
+  const addonList = [...state.addons].map(id => ADDONS.find(a => a.id === id)?.name).filter(Boolean).join(", ");
+  const disc = FREQ_DISCOUNTS[state.frequency];
+  const dateStr = state.date ? new Date(state.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "Not selected";
+  const subtotal = calcSubtotal();
+  const total = calcTotal();
+  const hasPromo = state.promoStatus === "valid" && state.promoDiscount > 0;
+
+  return (
+    <>
+      <StepHeader eyebrow="Step 9 — Review" title="Review your booking" sub="Double check everything before we confirm your cleaning." />
+      <div style={{ background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-soft)" }}>
+        <div style={{ padding: 20 }}>
+          <SummaryRow label="Service" value={svc?.name || "—"} />
+          <SummaryRow label="Home Size" value={`${state.bedrooms} bed · ${state.bathrooms} bath${state.halfBaths > 0 ? ` · ${state.halfBaths} half` : ""}`} />
+          {addonList && <SummaryRow label="Add-ons" value={addonList} />}
+          <SummaryRow label="Frequency" value={`${freq?.name || "—"}${disc > 0 ? ` (${disc * 100}% off)` : ""}`} />
+          <SummaryRow label="Date" value={dateStr} />
+          <SummaryRow label="Arrival" value={state.time || "—"} />
+          <SummaryRow label="Address" value={`${state.address}${state.apt ? ", " + state.apt : ""}, ${state.city}, ${state.stateCode} ${state.zip}`} />
+          <SummaryRow label="Contact" value={`${state.firstName} ${state.lastName} · ${state.phone}`} />
+          <SummaryRow label="Payment" value={state.payConfirmed ? "Card on file via Stripe" : "Not confirmed"} />
+          {hasPromo && <SummaryRow label="Promo Code" value={<span style={{ color: "#16a34a" }}>{state.promoCode} (−${Math.round(state.promoDiscount / 100)})</span>} />}
+          <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
+            {hasPromo ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, color: "var(--color-ink-mid)", marginBottom: 4 }}>
+                  <span>Subtotal</span>
+                  <span>${subtotal}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, color: "#16a34a", marginBottom: 8, fontWeight: 600 }}>
+                  <span>Promo ({state.promoCode})</span>
+                  <span>−${Math.round(state.promoDiscount / 100)}</span>
+                </div>
+                <div style={{ borderTop: "1px solid var(--color-surface-mid)", paddingTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</span>
+                  <span style={{ fontSize: 24, fontWeight: 700, color: "var(--color-accent)" }}>${total}</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>Total Due After Service</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--color-accent)" }}>${total}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <button onClick={() => goToStep(1)} style={{ background: "none", border: "2px solid var(--color-rule)", borderRadius: 50, padding: 14, fontSize: 15, fontWeight: 600, color: "var(--color-ink-mid)", cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>Edit Booking</button>
+      </div>
+    </>
+  );
+}
+
+// ── Shared sub-components ──────────────────────────────────────────────
+
+function AppHeader() {
+  return (
+    <header style={{ background: "white", borderBottom: "1px solid var(--color-rule)", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 12px rgba(29,127,232,0.07)" }}>
+      <BubbleLogo size={44} />
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent-deep)", letterSpacing: "-0.3px" }}>BubbleBox ATL</div>
+        <div style={{ fontSize: 12, color: "var(--color-muted)", fontWeight: 500 }}>Atlanta's #1 Cleaning Service</div>
+      </div>
     </header>
   );
 }
 
-// ── Offers Tab ────────────────────────────────────────────────────
-// Uber-style: open offers are shown to every eligible pro; first to accept
-// wins the job. Polls every 20s while this tab is open.
-interface Offer {
-  requested_by_customer?: boolean;
-  customer_first?: string | null;
-  id: string;
-  booking_id?: string;
-  status?: string;
-  expires_at?: string | null;
-  created_at?: string;
-  // booking details arrive either flat or nested under `booking`
-  booking?: Partial<Job>;
-  [key: string]: any;
-}
-
-function normalizeOffer(o: Offer): { offer: Offer; job: Partial<Job> } {
-  return { offer: o, job: o.booking ?? (o as Partial<Job>) };
-}
-
-function OffersTab({
-  accessToken,
-  onCountChange,
-  onAccepted,
-}: {
-  accessToken: string;
-  onCountChange: (n: number) => void;
-  onAccepted: () => void;
-}) {
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [notifState, setNotifState] = useState<string>(
-    typeof Notification !== "undefined" ? Notification.permission : "unsupported"
-  );
-
-  async function load(showSpinner = false) {
-    if (showSpinner) setLoading(true);
-    try {
-      const resp = await fetch(`${API_BASE}/api/pros/me/offers`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const body = await resp.json();
-      if (!resp.ok) {
-        setError(body?.error?.message || `Couldn't load offers (${resp.status})`);
-      } else {
-        const list: Offer[] = Array.isArray(body.data) ? body.data : body.data?.offers ?? [];
-        setOffers(list);
-        onCountChange(list.length);
-        setError(null);
-      }
-    } catch (e: any) {
-      setError(e?.message || "Couldn't reach the server.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load(true);
-    const iv = setInterval(() => load(false), 20_000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
-
-  async function act(offerId: string, action: "accept" | "decline") {
-    setBusyId(offerId);
-    setNotice(null);
-    try {
-      const resp = await fetch(
-        `${API_BASE}/api/pros/me/offers/${offerId}/${action}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        // 409 = someone else beat them to it — refresh so it disappears
-        if (resp.status === 409 || resp.status === 410) {
-          setNotice("Sorry — another cleaner grabbed that one first. Keep an eye out for the next offer!");
-          await load(false);
-        } else {
-          setNotice(body?.error?.message || `Couldn't ${action} the offer. Try again.`);
-        }
-        return;
-      }
-      if (action === "accept") {
-        setNotice("🎉 Job is yours! It's now in your Jobs tab.");
-        await load(false);
-        setTimeout(onAccepted, 900);
-      } else {
-        setOffers((prev) => {
-          const next = prev.filter((o) => o.id !== offerId);
-          onCountChange(next.length);
-          return next;
-        });
-      }
-    } catch (e: any) {
-      setNotice(e?.message || "Network error — try again.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function enableNotifications() {
-    if (typeof Notification === "undefined") return;
-    Notification.requestPermission().then(setNotifState);
-  }
-
+function StepHeader({ eyebrow, title, sub }: { eyebrow: string; title: string; sub: string }) {
   return (
-    <div>
-      {notifState === "default" && (
-        <button className="notif-banner" onClick={enableNotifications}>
-          🔔 Turn on notifications to get alerted the moment a new job drops — tap here
-        </button>
-      )}
-      {notifState === "denied" && (
-        <div className="notif-banner muted">
-          🔕 Notifications are blocked in your browser settings. Keep this page open — it checks for new offers every 30 seconds.
-        </div>
-      )}
-
-      {notice && <div className="offer-notice">{notice}</div>}
-
-      {loading ? (
-        <div className="loading">Checking for offers…</div>
-      ) : error ? (
-        <div className="error-card">
-          <div className="error-icon">⚠️</div>
-          <div className="error-title">Couldn&apos;t load offers</div>
-          <div className="error-sub">{error}</div>
-        </div>
-      ) : offers.length === 0 ? (
-        <div className="empty-card">
-          <div className="empty-icon">📡</div>
-          <div className="empty-title">No open offers right now</div>
-          <div className="empty-sub">
-            New jobs in your ZIP codes will appear here the moment a customer books.
-            This page refreshes automatically — first cleaner to accept gets the job.
-          </div>
-        </div>
-      ) : (
-        <div className="bookings-list">
-          {offers.map((o) => (
-            <OfferCard
-              key={o.id}
-              offer={o}
-              busy={busyId === o.id}
-              onAccept={() => act(o.id, "accept")}
-              onDecline={() => act(o.id, "decline")}
-            />
-          ))}
-        </div>
-      )}
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 6 }}>{eyebrow}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: "var(--color-ink)", lineHeight: 1.2, letterSpacing: "-0.5px" }}>{title}</div>
+      <div style={{ fontSize: 14, color: "var(--color-ink-mid)", marginTop: 6, lineHeight: 1.5 }}>{sub}</div>
     </div>
   );
 }
 
-function OfferCard({
-  offer,
-  busy,
-  onAccept,
-  onDecline,
-}: {
-  offer: Offer;
-  busy: boolean;
-  onAccept: () => void;
-  onDecline: () => void;
-}) {
-  const { job: j } = normalizeOffer(offer);
-  const [now, setNow] = useState(() => Date.now());
-  const requested = offer.requested_by_customer;
-
-  // live countdown if the offer expires
-  useEffect(() => {
-    if (!offer.expires_at) return;
-    const iv = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(iv);
-  }, [offer.expires_at]);
-
-  const date = j.preferred_date
-    ? new Date(j.preferred_date + "T12:00:00").toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })
-    : "Date TBD";
-  const total = payoutBaseCents(j);
-
-  let countdown: string | null = null;
-  let expired = false;
-  if (offer.expires_at) {
-    const ms = new Date(offer.expires_at).getTime() - now;
-    if (ms <= 0) {
-      expired = true;
-    } else {
-      const m = Math.floor(ms / 60000);
-      const s = Math.floor((ms % 60000) / 1000);
-      countdown = m > 0 ? `${m}m ${s}s` : `${s}s`;
-    }
-  }
-
+function TextInput({ label, placeholder, value, onChange, type = "text", inputMode, autoComplete, required, maxLength }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; type?: string; inputMode?: any; autoComplete?: string; required?: boolean; maxLength?: number }) {
   return (
-    <div className="booking-card offer-card" style={requested ? { border: "2px solid #f59e0b", boxShadow: "0 2px 12px rgba(245,158,11,0.18)" } : undefined}>
-      {requested && (
-        <div style={{ background: "#fffbeb", color: "#92400e", fontSize: 12.5, fontWeight: 800, borderRadius: 8, padding: "6px 10px", marginBottom: 10, display: "inline-block" }}>
-          ⭐ {offer.customer_first || "A customer"} requested you again
-        </div>
-      )}
-      <div className="booking-head">
-        <div className="booking-svc">
-          <span className="booking-icon">{j.service_icon || "🫧"}</span>
-          <div>
-            <div className="booking-name">{j.service_name || "Cleaning"}</div>
-            <div className="booking-id">
-              {j.zip ? `ZIP ${j.zip}` : ""}
-              {countdown ? ` · ⏱ ${countdown} left` : ""}
-            </div>
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <span className="offer-pay">${payoutDollars(total)}</span>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600 }}>your payout</div>
-        </div>
-      </div>
-
-      <dl className="booking-rows">
-        <Row label="Date" value={date} />
-        <Row label="Window" value={j.preferred_window || "—"} />
-        {scopeLine(j) && <Row label="Size" value={scopeLine(j)!} />}
-        {j.supplies_provided !== null && j.supplies_provided !== undefined && (
-          <Row
-            label="Supplies"
-            value={j.supplies_provided ? "Customer provides" : "You bring supplies"}
-          />
-        )}
-        <Row label="Area" value={j.zip ? `ZIP ${j.zip}` : "—"} />
-        {j.notes && <Row label="Notes" value={j.notes} />}
-      </dl>
-
-      <div className="offer-actions">
-        <button
-          className="btn-decline"
-          onClick={onDecline}
-          disabled={busy || expired}
-        >
-          Pass
-        </button>
-        <button
-          className="btn-accept"
-          onClick={onAccept}
-          disabled={busy || expired}
-        >
-          {expired ? "Expired" : busy ? "Working…" : "Accept job ✓"}
-        </button>
-      </div>
-      <div className="offer-fine">
-        Customer pays ${Math.round(total / 100)} · your payout is 80% (BubbleBox service fee: 20%).
-        Exact address and customer contact are shared after you accept.
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)" }}>{label}</label>
+      <input
+        type={type} placeholder={placeholder} value={value}
+        onChange={e => onChange(e.target.value)}
+        inputMode={inputMode} autoComplete={autoComplete} required={required} maxLength={maxLength}
+        style={{ width: "100%", padding: "13px 14px", border: "2px solid var(--color-rule)", borderRadius: 10, fontSize: 15, color: "var(--color-ink)", background: "white", outline: "none", WebkitAppearance: "none", transition: "border-color 0.15s" }}
+        onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(29,127,232,0.12)"; }}
+        onBlur={e => { e.target.style.borderColor = "var(--color-rule)"; e.target.style.boxShadow = "none"; }}
+      />
     </div>
   );
 }
 
-// ── Jobs Tab ──────────────────────────────────────────────────────
-function JobsTab({ accessToken }: { accessToken: string }) {
-  const [filter, setFilter] = useState<JobFilter>("upcoming");
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const resp = await fetch(
-          `${API_BASE}/api/pros/me/jobs?status=${filter}&limit=100`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        const body = await resp.json();
-        if (cancelled) return;
-        if (!resp.ok) {
-          setError(body?.error?.message || "Couldn't load jobs");
-        } else {
-          setJobs(body.data.jobs || []);
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Couldn't load jobs");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [filter, accessToken]);
-
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <div className="filter-bar">
-        {(["upcoming", "past", "all"] as JobFilter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`filter-chip ${filter === f ? "active" : ""}`}
-          >
-            {f === "upcoming" ? "Upcoming" : f === "past" ? "Past" : "All"}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="loading">Loading jobs…</div>
-      ) : error ? (
-        <div className="error-card">
-          <div className="error-icon">⚠️</div>
-          <div className="error-title">Couldn't load jobs</div>
-          <div className="error-sub">{error}</div>
-        </div>
-      ) : jobs.length === 0 ? (
-        <div className="empty-card">
-          <div className="empty-icon">🫧</div>
-          <div className="empty-title">
-            {filter === "upcoming" ? "No upcoming jobs" : filter === "past" ? "No past jobs" : "No jobs yet"}
-          </div>
-          <div className="empty-sub">
-            {filter === "upcoming"
-              ? "When the admin assigns you a booking, it'll show up here."
-              : "Once you start completing cleanings, your history will appear here."}
-          </div>
-        </div>
-      ) : (
-        <div className="bookings-list">
-          {jobs.map((j) => (
-            <JobCard
-              key={j.id}
-              job={j}
-              accessToken={accessToken}
-              onStatusChange={(id, status) =>
-                setJobs((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)))
-              }
-            />
-          ))}
-        </div>
-      )}
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid var(--color-surface-mid)", gap: 12 }}>
+      <dt style={{ fontSize: 13, color: "var(--color-muted)", fontWeight: 500 }}>{label}</dt>
+      <dd style={{ fontSize: 14, fontWeight: 600, color: "var(--color-ink)", textAlign: "right" }}>{value}</dd>
     </div>
   );
 }
 
-function JobCard({
-  job: j,
-  accessToken,
-  onStatusChange,
-}: {
-  job: Job;
-  accessToken: string;
-  onStatusChange: (id: string, status: string) => void;
-}) {
-  const [released, setReleased] = useState(false);
+const btnNext: React.CSSProperties = {
+  background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)",
+  color: "white", border: "none", borderRadius: 50, padding: "14px 28px", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s", boxShadow: "0 4px 16px rgba(29,127,232,0.35)", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
+};
 
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [captureNote, setCaptureNote] = useState<string | null>(null);
+const btnPrimary: React.CSSProperties = {
+  width: "100%", maxWidth: 320, background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", border: "none", borderRadius: 50, padding: 16, fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s", boxShadow: "0 4px 16px rgba(29,127,232,0.35)",
+};
 
-  async function setStatus(next: "enroute" | "in_progress" | "completed") {
-    if (next === "completed" && !window.confirm("Mark this job complete? This charges the customer's card for the amount on the booking.")) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      const resp = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/status`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
-      });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        setErr(body?.error?.message || "Couldn't update — try again.");
-      } else {
-        onStatusChange(j.id, next);
-        if (next === "completed") {
-          setCaptureNote(
-            body?.data?.capture?.captured
-              ? `✓ Job complete — $${((body.data.capture.amount_cents ?? 0) / 100).toFixed(2)} charged to the customer.`
-              : "✓ Job complete. Payment will be settled by BubbleBox."
-          );
-        }
-      }
-    } catch {
-      setErr("Network error — try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const date = j.preferred_date
-    ? new Date(j.preferred_date + "T12:00:00").toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })
-    : "Date TBD";
-  const total = payoutBaseCents(j);
-  const totalDollars = (total / 100).toFixed(0);
-
-  const statusLabels: Record<string, { label: string; tone: string }> = {
-    requested: { label: "New offer", tone: "blue" },
-    broadcasting: { label: "Awaiting", tone: "blue" },
-    confirmed: { label: "Confirmed", tone: "green" },
-    enroute: { label: "En route", tone: "green" },
-    in_progress: { label: "In progress", tone: "green" },
-    completed: { label: "Completed", tone: "gray" },
-    cancelled: { label: "Cancelled", tone: "red" },
-  };
-  const status = statusLabels[j.status] ?? { label: j.status, tone: "gray" };
-
+export default function BookPage() {
   return (
-    <div className="booking-card">
-      <div className="booking-head">
-        <div className="booking-svc">
-          <span className="booking-icon">{j.service_icon || "🧽"}</span>
-          <div>
-            <div className="booking-name">{j.service_name || "Cleaning"}</div>
-            <div className="booking-id">#{j.id.replace(/^bk_/, "").toUpperCase()}</div>
-          </div>
-        </div>
-        <span className={`status-pill tone-${status.tone}`}>{status.label}</span>
-      </div>
-
-      <dl className="booking-rows">
-        <Row label="Date" value={date} />
-        <Row label="Window" value={j.preferred_window || "—"} />
-        {scopeLine(j) && <Row label="Size" value={scopeLine(j)!} />}
-        {j.supplies_provided !== null && j.supplies_provided !== undefined && (
-          <Row
-            label="Supplies"
-            value={j.supplies_provided ? "Customer provides" : "You bring supplies"}
-          />
-        )}
-        <Row label="Customer" value={j.customer_name || "—"} />
-        {j.customer_phone && (
-          <Row
-            label="Phone"
-            value={
-              <a href={`tel:${j.customer_phone}`} className="link">
-                {j.customer_phone}
-              </a>
-            }
-          />
-        )}
-        <Row label="Address" value={j.address_line || `ZIP ${j.zip}`} />
-        {j.notes && <Row label="Notes" value={j.notes} />}
-        <Row label="Customer pays" value={`$${totalDollars}`} />
-        <Row label="Your payout (80%)" value={<strong style={{ color: "#15803d" }}>${payoutDollars(total)}</strong>} />
-      </dl>
-
-      {["confirmed", "enroute", "in_progress"].includes(j.status) && (
-        <div className="job-actions">
-          {j.address_line && (j.status === "confirmed" || j.status === "enroute") && (
-            <a
-              className="btn-nav"
-              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(j.address_line + (j.zip ? " " + j.zip : ""))}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              🧭 Navigate
-            </a>
-          )}
-          {j.status === "confirmed" && (
-            <button className="btn-accept" disabled={busy} onClick={() => setStatus("enroute")}>
-              {busy ? "…" : "🚗 On my way"}
-            </button>
-          )}
-          {j.status === "enroute" && (
-            <button className="btn-accept" disabled={busy} onClick={() => setStatus("in_progress")}>
-              {busy ? "…" : "▶ Start job"}
-            </button>
-          )}
-          {j.status === "in_progress" && (
-            <button className="btn-accept" disabled={busy} onClick={() => setStatus("completed")}>
-              {busy ? "…" : "✓ Complete job"}
-            </button>
-          )}
-        </div>
-      )}
-      {["confirmed", "enroute"].includes(j.status) && !released && (
-        <div style={{ textAlign: "center", marginTop: 10 }}>
-          <button
-            onClick={async () => {
-              const reason = window.prompt("We get it — things happen. Why can't you make this job? (required)");
-              if (!reason || reason.trim().length < 3) return;
-              if (!window.confirm("Release this job? It will be offered to other cleaners. Under 24 hours notice counts as a strike.")) return;
-              setBusy(true);
-              try {
-                const r = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/cancel`, {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ reason: reason.trim() }),
-                });
-                const body = await r.json().catch(() => ({}));
-                if (!r.ok) { setErr(body?.error?.message || "Couldn't release the job"); }
-                else { setReleased(true); setCaptureNote(body?.data?.message || "Job released."); }
-              } catch { setErr("Network error — try again"); }
-              finally { setBusy(false); }
-            }}
-            disabled={busy}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#9ca3af", textDecoration: "underline", fontFamily: "inherit" }}
-          >
-            Can&apos;t make this job?
-          </button>
-        </div>
-      )}
-      {err && <div className="job-err">{err}</div>}
-      {captureNote && <div className="job-done">{captureNote}</div>}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="booking-row">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
-// ── Earnings Tab ──────────────────────────────────────────────────
-function EarningsTab({ accessToken }: { accessToken: string }) {
-  const [period, setPeriod] = useState<Period>("month");
-  const [data, setData] = useState<EarningsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const resp = await fetch(
-          `${API_BASE}/api/pros/me/earnings?period=${period}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        const body = await resp.json();
-        if (cancelled) return;
-        if (!resp.ok) {
-          setError(body?.error?.message || "Couldn't load earnings");
-        } else {
-          setData(body.data as EarningsResponse);
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Couldn't load earnings");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [period, accessToken]);
-
-  if (loading) return <div className="loading">Loading earnings…</div>;
-
-  if (error) {
-    return (
-      <div className="error-card">
-        <div className="error-icon">⚠️</div>
-        <div className="error-title">Couldn't load earnings</div>
-        <div className="error-sub">{error}</div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  return (
-    <div>
-      <div className="filter-bar">
-        {(["week", "month", "year", "all"] as Period[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`filter-chip ${period === p ? "active" : ""}`}
-          >
-            {p === "week" ? "This week" : p === "month" ? "This month" : p === "year" ? "This year" : "All time"}
-          </button>
-        ))}
-      </div>
-
-      <div className="earnings-grid">
-        <div className="earnings-card primary">
-          <div className="earnings-label">
-            {period === "week" ? "This week" : period === "month" ? "This month" : period === "year" ? "This year" : "Lifetime"}
-          </div>
-          <div className="earnings-value">${Math.round((data.period_totals.gross_cents * PRO_SHARE) / 100).toLocaleString()}</div>
-          <div className="earnings-sub">{data.period_totals.jobs} {data.period_totals.jobs === 1 ? "job" : "jobs"} completed · take-home</div>
-        </div>
-        <div className="earnings-card">
-          <div className="earnings-label">Pending</div>
-          <div className="earnings-value">${Math.round((data.pending.gross_cents * PRO_SHARE) / 100).toLocaleString()}</div>
-          <div className="earnings-sub">{data.pending.jobs} {data.pending.jobs === 1 ? "job" : "jobs"} scheduled · take-home</div>
-        </div>
-        <div className="earnings-card">
-          <div className="earnings-label">Lifetime</div>
-          <div className="earnings-value">${Math.round((data.lifetime_totals.gross_cents * PRO_SHARE) / 100).toLocaleString()}</div>
-          <div className="earnings-sub">{data.lifetime_totals.jobs} total {data.lifetime_totals.jobs === 1 ? "job" : "jobs"}</div>
-        </div>
-      </div>
-
-      <div className="earnings-disclaimer">
-        All amounts are your take-home earnings (80% of what the customer pays — BubbleBox's service fee is 20%). Payouts are sent directly to you after each completed job.
-      </div>
-
-      <h3 className="section-title">Recent completed jobs</h3>
-      {data.recent_completions.length === 0 ? (
-        <div className="empty-card small">
-          <div className="empty-sub">No completed jobs yet.</div>
-        </div>
-      ) : (
-        <div className="completion-list">
-          {data.recent_completions.map((r) => (
-            <div key={r.id} className="completion-row">
-              <div>
-                <div className="completion-service">{r.service_name || "Cleaning"}</div>
-                <div className="completion-sub">
-                  {new Date(r.preferred_date + "T12:00:00").toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                  {" · "}
-                  {r.customer_name || "Customer"}
-                </div>
-              </div>
-              <div className="completion-amount">${Math.round((r.amount_cents * PRO_SHARE) / 100).toLocaleString()}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Profile Tab ───────────────────────────────────────────────────
-function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string; accessToken: string }) {
-  const [phone, setPhone] = useState(pro.phone || "");
-  const [bio, setBio] = useState(pro.bio || "");
-  const [zips, setZips] = useState((pro.zip_codes || []).join(", "));
-  const [photoUrl, setPhotoUrl] = useState<string | null>(pro.photo_url ?? null);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  // Pull the freshest editable fields (covers photo/bio if /me lags behind)
-  useEffect(() => {
-    fetch(`${API_BASE}/api/pros/me/profile`, { headers: { Authorization: `Bearer ${accessToken}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!j?.data) return;
-        setPhone(j.data.phone || "");
-        setBio(j.data.bio || "");
-        setZips((j.data.zip_codes || []).join(", "));
-        setPhotoUrl(j.data.photo_url ?? null);
-      })
-      .catch(() => {});
-  }, [accessToken]);
-
-  async function uploadPhoto(file: File) {
-    setErr(null);
-    if (!file.type.startsWith("image/")) { setErr("Please choose an image file."); return; }
-    if (file.size > 5 * 1024 * 1024) { setErr("Photo must be under 5 MB."); return; }
-    setUploading(true);
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const uid = sess?.session?.user?.id;
-      if (!uid) throw new Error("Not signed in");
-      const ext = file.type === "image/png" ? "png" : "jpg";
-      const path = `${uid}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("pro-photos")
-        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: "3600" });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("pro-photos").getPublicUrl(path);
-      const url = `${pub.publicUrl}?v=${Date.now()}`;
-      const r = await fetch(`${API_BASE}/api/pros/me/profile`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_url: url }),
-      });
-      if (!r.ok) throw new Error("Couldn't save the photo");
-      setPhotoUrl(url);
-      setMsg("Photo updated! Customers now see your face when you're assigned. ✨");
-    } catch (e: any) {
-      setErr(e?.message || "Upload failed — try again.");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function save() {
-    setErr(null); setMsg(null);
-    const zipList = zips.split(/[\s,]+/).filter(Boolean);
-    if (zipList.some((z) => !/^\d{5}$/.test(z))) { setErr("ZIPs must be 5 digits, separated by commas."); return; }
-    if (zipList.length === 0) { setErr("Add at least one service ZIP."); return; }
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 10) { setErr("Enter a valid phone number."); return; }
-    setSaving(true);
-    try {
-      const r = await fetch(`${API_BASE}/api/pros/me/profile`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone.trim(), bio: bio.trim(), zip_codes: zipList }),
-      });
-      const body = await r.json().catch(() => ({}));
-      if (!r.ok) { setErr(body?.error?.message || "Couldn't save — try again."); return; }
-      setMsg("Profile saved ✓");
-    } catch {
-      setErr("Network error — try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="profile-card">
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
-        {photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl} alt="Profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid var(--blue)" }} />
-        ) : (
-          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--blue)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800 }}>
-            {(pro.full_name || "?")[0]}
-          </div>
-        )}
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>{pro.full_name}</div>
-          <label style={{ display: "inline-block", marginTop: 6, fontSize: 13, fontWeight: 700, color: "var(--blue)", cursor: "pointer", textDecoration: "underline" }}>
-            {uploading ? "Uploading…" : photoUrl ? "Change photo" : "📷 Add a profile photo"}
-            <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploading}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.currentTarget.value = ""; }} />
-          </label>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>Customers see this when you&apos;re their cleaner. A friendly photo wins jobs.</div>
-        </div>
-      </div>
-
-      <div className="profile-row"><div className="profile-label">Email</div><div className="profile-value">{pro.email || email}</div></div>
-
-      <div style={{ padding: "12px 0", borderBottom: "1px solid #eef2f7" }}>
-        <div className="profile-label" style={{ marginBottom: 6 }}>Phone</div>
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel"
-          style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none" }} />
-      </div>
-
-      <div style={{ padding: "12px 0", borderBottom: "1px solid #eef2f7" }}>
-        <div className="profile-label" style={{ marginBottom: 6 }}>Service ZIP codes <span style={{ fontWeight: 400, color: "#9ca3af" }}>(comma-separated — jobs in these ZIPs come to you first)</span></div>
-        <input value={zips} onChange={(e) => setZips(e.target.value)} placeholder="30311, 30318, 30310"
-          style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none" }} />
-      </div>
-
-      <div style={{ padding: "12px 0", borderBottom: "1px solid #eef2f7" }}>
-        <div className="profile-label" style={{ marginBottom: 6 }}>About you <span style={{ fontWeight: 400, color: "#9ca3af" }}>(customers see this — a sentence or two)</span></div>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} maxLength={400}
-          placeholder="e.g. 8 years of residential cleaning experience. I love leaving kitchens spotless!"
-          style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
-      </div>
-
-      <div className="profile-row"><div className="profile-label">Services</div><div className="profile-value">{pro.services.length ? pro.services.join(", ") : "—"}</div></div>
-      <div className="profile-row"><div className="profile-label">Background check</div><div className="profile-value"><span className={`status-pill tone-${pro.background_check_status === "cleared" ? "green" : "blue"}`}>{pro.background_check_status}</span></div></div>
-      <div className="profile-row"><div className="profile-label">Account status</div><div className="profile-value"><span className={`status-pill tone-${pro.application_status === "approved" ? "green" : "blue"}`}>{pro.application_status}</span></div></div>
-
-      {err && <div style={{ marginTop: 12, fontSize: 13, color: "#b91c1c", background: "#fef2f2", borderRadius: 8, padding: "8px 12px" }}>{err}</div>}
-      {msg && <div style={{ marginTop: 12, fontSize: 13, color: "#15803d", fontWeight: 600, background: "#f0fdf4", borderRadius: 8, padding: "8px 12px" }}>{msg}</div>}
-
-      <button onClick={save} disabled={saving} className="btn-accept" style={{ width: "100%", marginTop: 16 }}>
-        {saving ? "Saving…" : "Save profile"}
-      </button>
-      <div className="profile-note" style={{ marginTop: 12 }}>
-        Name, services, or account changes: email <a href="mailto:hello@bubbleboxatl.com" className="link">hello@bubbleboxatl.com</a>.
-      </div>
-    </div>
-  );
-}
-
-function ProfileRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="profile-row">
-      <div className="profile-label">{label}</div>
-      <div className="profile-value">{value}</div>
-    </div>
-  );
-}
-
-// ── Styles ────────────────────────────────────────────────────────
-function PageStyles() {
-  return (
-    <style jsx global>{`
-      /* ── Job-day actions ────────────────────── */
-      .job-actions { display: flex; gap: 10px; margin-top: 14px; }
-      .btn-nav {
-        flex: 1; display: flex; align-items: center; justify-content: center;
-        padding: 13px; border-radius: 12px; border: 1.5px solid var(--blue);
-        color: var(--blue); background: white; font-size: 14px; font-weight: 700;
-        text-decoration: none;
-      }
-      .job-actions .btn-accept { flex: 2; }
-      .job-err {
-        margin-top: 10px; font-size: 13px; color: #b91c1c;
-        background: #fef2f2; border-radius: 8px; padding: 8px 12px;
-      }
-      .job-done {
-        margin-top: 10px; font-size: 13px; color: #15803d; font-weight: 600;
-        background: #f0fdf4; border-radius: 8px; padding: 8px 12px;
-      }
-      /* ── Offers ─────────────────────────────── */
-      .offer-card { border: 2px solid var(--blue); }
-      .offer-pay {
-        font-size: 22px; font-weight: 800; color: var(--blue);
-        white-space: nowrap;
-      }
-      .offer-actions {
-        display: flex; gap: 10px; margin-top: 14px;
-      }
-      .btn-accept {
-        flex: 2; padding: 13px; border: none; border-radius: 12px;
-        background: linear-gradient(135deg, #16a34a, #15803d);
-        color: white; font-size: 15px; font-weight: 800;
-        cursor: pointer; font-family: inherit;
-      }
-      .btn-decline {
-        flex: 1; padding: 13px; border-radius: 12px;
-        border: 1.5px solid #d1d5db; background: white;
-        color: #6b7280; font-size: 15px; font-weight: 700;
-        cursor: pointer; font-family: inherit;
-      }
-      .btn-accept:disabled, .btn-decline:disabled { opacity: 0.5; cursor: default; }
-      .offer-fine {
-        margin-top: 10px; font-size: 11px; color: #9ca3af; text-align: center;
-      }
-      .offer-notice {
-        background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
-        border-radius: 12px; padding: 12px 16px; font-size: 14px;
-        font-weight: 600; margin-bottom: 14px;
-      }
-      .notif-banner {
-        display: block; width: 100%; text-align: left;
-        background: #fefce8; border: 1px solid #fde047; color: #854d0e;
-        border-radius: 12px; padding: 12px 16px; font-size: 13px;
-        font-weight: 600; margin-bottom: 14px; cursor: pointer;
-        font-family: inherit;
-      }
-      .notif-banner.muted {
-        background: #f9fafb; border-color: #e5e7eb; color: #6b7280;
-        cursor: default;
-      }
-      .tab-badge.pulse { animation: bbPulse 2s ease-in-out infinite; }
-      @keyframes bbPulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.18); }
-      }
-      :root {
-        --blue: #1D7FE8;
-        --blue-dark: #0A2FA8;
-        --blue-mid: #2563EB;
-        --blue-light: #60B4FF;
-        --blue-pale: #D6EEFF;
-        --blue-bg: #EBF5FF;
-        --bg: #F5FBFF;
-        --text: #0D1B3E;
-        --text-mid: #3B5280;
-        --text-light: #7B9DC7;
-        --border: #C8E0F8;
-        --surface: #F0F8FF;
-        --surface-mid: #DCE9F7;
-        --green: #16A34A;
-        --green-bg: #DCFCE7;
-        --green-dark: #15803D;
-      }
-      .page {
-        font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
-        min-height: 100vh;
-        color: var(--text);
-        background: var(--bg);
-        display: flex;
-        flex-direction: column;
-      }
-      .topbar {
-        background: white;
-        border-bottom: 1px solid var(--border);
-        padding: 16px 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-      .topbar-logo { text-decoration: none; color: inherit; }
-      .topbar-name { font-size: 18px; font-weight: 800; color: var(--blue-dark); letter-spacing: -0.3px; }
-      .topbar-sub { font-size: 11px; font-weight: 600; color: var(--text-light); letter-spacing: 0.5px; text-transform: uppercase; }
-      .signout-btn {
-        background: none;
-        border: 1.5px solid var(--border);
-        color: var(--text-mid);
-        font-family: inherit;
-        font-size: 13px;
-        font-weight: 600;
-        padding: 8px 16px;
-        border-radius: 50px;
-        cursor: pointer;
-      }
-      .signout-btn:hover { border-color: var(--blue); color: var(--blue); }
-
-      .hero {
-        background: linear-gradient(135deg, var(--blue-bg) 0%, var(--bg) 100%);
-        padding: 36px 24px 28px;
-      }
-      .hero-inner { max-width: 880px; margin: 0 auto; }
-      .hero-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 24px;
-        flex-wrap: wrap;
-      }
-      .greeting {
-        font-family: 'DM Serif Display', Georgia, serif;
-        font-size: 32px;
-        letter-spacing: -0.5px;
-        color: var(--text);
-        line-height: 1.1;
-      }
-      .greeting-sub {
-        font-size: 15px;
-        color: var(--text-mid);
-        margin-top: 6px;
-      }
-      .hero-stats {
-        display: flex;
-        gap: 20px;
-      }
-      .hero-stat {
-        text-align: center;
-        min-width: 64px;
-      }
-      .hero-stat-value {
-        font-family: 'DM Serif Display', Georgia, serif;
-        font-size: 26px;
-        color: var(--blue-dark);
-        line-height: 1;
-      }
-      .hero-stat-label {
-        font-size: 11px;
-        color: var(--text-light);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 4px;
-      }
-
-      .tabs {
-        background: white;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        gap: 4px;
-        padding: 0 24px;
-        max-width: 880px;
-        margin: 0 auto;
-        width: 100%;
-        box-sizing: border-box;
-      }
-      .tab {
-        background: none;
-        border: none;
-        font-family: inherit;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text-mid);
-        padding: 14px 16px;
-        cursor: pointer;
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        border-bottom: 3px solid transparent;
-        transition: all 0.15s;
-      }
-      .tab:hover { color: var(--blue); }
-      .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
-      .tab-badge {
-        background: var(--blue);
-        color: white;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 2px 8px;
-        border-radius: 99px;
-        min-width: 20px;
-        text-align: center;
-      }
-
-      .shell {
-        flex: 1;
-        max-width: 880px;
-        margin: 0 auto;
-        width: 100%;
-        padding: 24px;
-        box-sizing: border-box;
-      }
-
-      .loading {
-        text-align: center;
-        padding: 60px 20px;
-        color: var(--text-mid);
-      }
-
-      .filter-bar {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 18px;
-      }
-      .filter-chip {
-        background: white;
-        border: 1.5px solid var(--border);
-        color: var(--text-mid);
-        font-family: inherit;
-        font-size: 13px;
-        font-weight: 600;
-        padding: 8px 16px;
-        border-radius: 50px;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-      .filter-chip:hover { border-color: var(--blue); color: var(--blue); }
-      .filter-chip.active {
-        background: var(--blue);
-        color: white;
-        border-color: var(--blue);
-      }
-
-      .empty-card, .signin-card, .error-card {
-        background: white;
-        border: 1.5px solid var(--border);
-        border-radius: 20px;
-        padding: 48px 28px;
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(29,127,232,0.06);
-      }
-      .empty-card.small { padding: 20px; }
-      .empty-icon, .signin-icon, .error-icon { font-size: 48px; margin-bottom: 12px; }
-      .empty-title, .signin-title, .error-title {
-        font-family: 'DM Serif Display', Georgia, serif;
-        font-size: 24px;
-        color: var(--text);
-        margin-bottom: 8px;
-        letter-spacing: -0.3px;
-      }
-      .empty-sub, .signin-sub, .error-sub {
-        font-size: 14px;
-        color: var(--text-mid);
-        line-height: 1.5;
-        max-width: 420px;
-        margin: 0 auto 20px;
-      }
-      .signin-shell { display: flex; align-items: center; }
-      .signin-cta { display: inline-block; text-decoration: none; }
-      .signin-foot { margin-top: 16px; font-size: 13px; color: var(--text-mid); }
-
-      .btn-primary, .btn-outline {
-        display: inline-block;
-        border-radius: 50px;
-        padding: 13px 28px;
-        font-size: 15px;
-        font-weight: 700;
-        font-family: inherit;
-        text-decoration: none;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-      .btn-primary {
-        background: linear-gradient(135deg, var(--blue), var(--blue-mid));
-        color: white;
-        border: none;
-        box-shadow: 0 4px 16px rgba(29,127,232,0.35);
-      }
-      .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(29,127,232,0.4); }
-      .btn-outline {
-        background: white;
-        color: var(--text);
-        border: 1.5px solid var(--border);
-      }
-      .btn-outline:hover { border-color: var(--blue); color: var(--blue); }
-
-      .link {
-        color: var(--blue);
-        font-weight: 600;
-        text-decoration: none;
-      }
-      .link:hover { text-decoration: underline; }
-
-      .bookings-list { display: flex; flex-direction: column; gap: 14px; }
-      .booking-card {
-        background: white;
-        border: 1.5px solid var(--border);
-        border-radius: 16px;
-        padding: 18px 20px;
-        box-shadow: 0 2px 12px rgba(29,127,232,0.05);
-      }
-      .booking-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        padding-bottom: 14px;
-        margin-bottom: 14px;
-        border-bottom: 1px solid var(--surface-mid);
-      }
-      .booking-svc { display: flex; gap: 12px; align-items: center; }
-      .booking-icon { font-size: 28px; }
-      .booking-name { font-size: 16px; font-weight: 700; color: var(--text); }
-      .booking-id { font-family: monospace; font-size: 11px; color: var(--text-light); margin-top: 2px; }
-
-      .status-pill {
-        font-size: 11px;
-        font-weight: 700;
-        padding: 5px 11px;
-        border-radius: 99px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        white-space: nowrap;
-        display: inline-block;
-      }
-      .tone-blue { background: var(--blue-bg); color: var(--blue-dark); }
-      .tone-green { background: var(--green-bg); color: var(--green-dark); }
-      .tone-gray { background: var(--surface); color: var(--text-mid); }
-      .tone-red { background: #FEE2E2; color: #B91C1C; }
-
-      .booking-rows { display: flex; flex-direction: column; gap: 8px; }
-      .booking-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        font-size: 14px;
-      }
-      .booking-row dt { color: var(--text-mid); }
-      .booking-row dd { color: var(--text); font-weight: 500; text-align: right; }
-
-      .earnings-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 14px;
-        margin-bottom: 20px;
-      }
-      .earnings-card {
-        background: white;
-        border: 1.5px solid var(--border);
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 2px 12px rgba(29,127,232,0.05);
-      }
-      .earnings-card.primary {
-        background: linear-gradient(135deg, var(--blue), var(--blue-mid));
-        border-color: var(--blue);
-        color: white;
-        box-shadow: 0 6px 20px rgba(29,127,232,0.25);
-      }
-      .earnings-card.primary .earnings-label,
-      .earnings-card.primary .earnings-sub {
-        color: rgba(255,255,255,0.85);
-      }
-      .earnings-label {
-        font-size: 12px;
-        color: var(--text-mid);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: 600;
-        margin-bottom: 8px;
-      }
-      .earnings-value {
-        font-family: 'DM Serif Display', Georgia, serif;
-        font-size: 32px;
-        line-height: 1;
-        margin-bottom: 6px;
-      }
-      .earnings-sub {
-        font-size: 13px;
-        color: var(--text-light);
-      }
-      .earnings-disclaimer {
-        font-size: 12px;
-        color: var(--text-light);
-        line-height: 1.5;
-        padding: 12px 16px;
-        background: var(--surface);
-        border-radius: 10px;
-        margin-bottom: 24px;
-      }
-      .section-title {
-        font-family: 'DM Serif Display', Georgia, serif;
-        font-size: 20px;
-        margin: 0 0 14px;
-        color: var(--text);
-        letter-spacing: -0.3px;
-      }
-      .completion-list {
-        background: white;
-        border: 1.5px solid var(--border);
-        border-radius: 16px;
-        overflow: hidden;
-      }
-      .completion-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 14px 18px;
-        border-bottom: 1px solid var(--surface-mid);
-        gap: 12px;
-      }
-      .completion-row:last-child { border-bottom: none; }
-      .completion-service { font-size: 14px; font-weight: 600; color: var(--text); }
-      .completion-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
-      .completion-amount {
-        font-size: 16px;
-        font-weight: 700;
-        color: var(--green-dark);
-      }
-
-      .profile-card {
-        background: white;
-        border: 1.5px solid var(--border);
-        border-radius: 20px;
-        padding: 24px;
-        box-shadow: 0 2px 12px rgba(29,127,232,0.05);
-      }
-      .profile-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 14px 0;
-        border-bottom: 1px solid var(--surface-mid);
-        gap: 12px;
-        align-items: center;
-      }
-      .profile-row:last-of-type { border-bottom: none; }
-      .profile-label { font-size: 13px; color: var(--text-mid); font-weight: 600; }
-      .profile-value { font-size: 15px; color: var(--text); font-weight: 500; text-align: right; }
-      .profile-note {
-        margin-top: 18px;
-        padding: 14px;
-        background: var(--blue-bg);
-        border-radius: 12px;
-        font-size: 13px;
-        color: var(--text-mid);
-        line-height: 1.5;
-        text-align: center;
-      }
-
-      @media (max-width: 640px) {
-        .hero-row { flex-direction: column; }
-        .hero-stats { width: 100%; justify-content: space-between; }
-      }
-    `}</style>
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Loading…</div>}>
+      <BookPageInner />
+    </Suspense>
   );
 }
