@@ -48,6 +48,11 @@ export interface AdminBooking {
   stripe_payment_intent_id: string | null;
   promo_code: string | null;
   discount_cents: number;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  half_baths: number | null;
+  supplies_provided: number | null;
+  frequency: string | null;
   created_at: string;
   updated_at: string;
   customer_name: string | null;
