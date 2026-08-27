@@ -18,9 +18,17 @@ function payoutDollars(totalCents: number): string {
 // are BubbleBox's marketing cost, not a cut of the cleaner's pay, so the
 // discount is added back before the 80% split. Mid-job add-ons are included
 // because they live in final_total_cents.
-function payoutBaseCents(j: { final_total_cents?: number | null; estimated_total_cents?: number | null; discount_cents?: number | null }): number {
-  const charged = j.final_total_cents ?? j.estimated_total_cents ?? 0;
-  return charged + (j.discount_cents ?? 0);
+function scopeLine(j: { bedrooms?: number | null; bathrooms?: number | null; half_baths?: number | null }): string | null {
+  if (j.bedrooms === null || j.bedrooms === undefined) return null;
+  const parts = [`${j.bedrooms} bed`, `${j.bathrooms ?? 0} bath`];
+  if (j.half_baths) parts.push(`${j.half_baths} half`);
+  return parts.join(" · ");
+}
+
+// Cleaners keep 80% of what the customer actually pays (post-discount).
+// Mid-job add-ons are included because they live in final_total_cents.
+function payoutBaseCents(j: { final_total_cents?: number | null; estimated_total_cents?: number | null }): number {
+  return j.final_total_cents ?? j.estimated_total_cents ?? 0;
 }
 type JobFilter = "upcoming" | "past" | "all";
 type Period = "week" | "month" | "year" | "all";
@@ -66,6 +74,10 @@ interface Job {
   estimated_total_cents: number | null;
   final_total_cents: number | null;
   discount_cents?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  half_baths?: number | null;
+  supplies_provided?: number | null;
   payment_status: string;
   created_at: string;
   service_name: string | null;
@@ -619,6 +631,13 @@ function OfferCard({
       <dl className="booking-rows">
         <Row label="Date" value={date} />
         <Row label="Window" value={j.preferred_window || "—"} />
+        {scopeLine(j) && <Row label="Size" value={scopeLine(j)!} />}
+        {j.supplies_provided !== null && j.supplies_provided !== undefined && (
+          <Row
+            label="Supplies"
+            value={j.supplies_provided ? "Customer provides" : "You bring supplies"}
+          />
+        )}
         <Row label="Area" value={j.zip ? `ZIP ${j.zip}` : "—"} />
         {j.notes && <Row label="Notes" value={j.notes} />}
       </dl>
@@ -815,6 +834,13 @@ function JobCard({
       <dl className="booking-rows">
         <Row label="Date" value={date} />
         <Row label="Window" value={j.preferred_window || "—"} />
+        {scopeLine(j) && <Row label="Size" value={scopeLine(j)!} />}
+        {j.supplies_provided !== null && j.supplies_provided !== undefined && (
+          <Row
+            label="Supplies"
+            value={j.supplies_provided ? "Customer provides" : "You bring supplies"}
+          />
+        )}
         <Row label="Customer" value={j.customer_name || "—"} />
         {j.customer_phone && (
           <Row
