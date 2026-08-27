@@ -235,7 +235,7 @@ function BookingModal({
             </div>
             <div className="detail-row">
               <div className="detail-label">Date</div>
-              <div className="detail-value">{booking.preferred_date} · {booking.preferred_window || "—"}</div>
+              <div className="detail-value">{booking.preferred_date} · {booking.preferred_time ? `${booking.preferred_time} (30-min arrival window)` : booking.preferred_window}</div>
             </div>
             <div className="detail-row">
               <div className="detail-label">ZIP</div>
