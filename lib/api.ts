@@ -24,6 +24,7 @@ export interface CreateBookingPayload {
   half_baths?: number;
   supplies_provided?: boolean;
   frequency?: string;
+  preferred_time?: string;
 }
 
 export interface BookingResponse {
