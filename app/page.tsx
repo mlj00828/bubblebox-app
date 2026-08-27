@@ -135,6 +135,24 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            <div style={{ background: "white", border: "2px solid var(--color-accent)", borderRadius: 16, padding: "26px 28px", marginBottom: 24 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--color-ink)" }}>✨ Deep Clean adds</h3>
+                <span style={{ fontSize: 13, color: "var(--color-muted)" }}>everything above, plus every detail a standard clean skips</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 20px" }} className="deep-grid">
+                {DEEP_CLEAN_EXTRAS.map(item => (
+                  <div key={item} style={{ fontSize: 13, color: "var(--color-ink-mid)", display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.5, padding: "3px 0" }}>
+                    <span style={{ color: "var(--color-accent)", fontWeight: 800, flexShrink: 0 }}>✓</span>{item}
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 14, lineHeight: 1.5 }}>
+                Move In / Out and Post-Construction include all of the above <strong>plus inside cabinets, drawers and interior windows</strong>.
+                Inside the oven and inside the refrigerator remain optional add-ons on every service.
+              </p>
+              <style>{`@media(max-width:900px){.deep-grid{grid-template-columns:repeat(2,1fr)!important}}@media(max-width:560px){.deep-grid{grid-template-columns:1fr!important}}`}</style>
+            </div>
             <div style={{ textAlign: "center", background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)", borderRadius: 10, padding: "14px 20px", fontSize: 14, fontWeight: 600, color: "var(--color-accent-mid)" }}>
               ✅ All supplies & equipment included — or save $10 by providing your own!
             </div>
@@ -348,6 +366,21 @@ const INCLUDED_ROOMS = [
   { icon: "🛋️", title: "Living Areas", items: ["All surfaces dusted","Baseboards wiped","Window sills dusted","Vacuum furniture & cushions","Vacuum & mop floors","Light switches & door handles","Ceiling fans dusted","Trash emptied & relined"] },
   { icon: "🏠", title: "General / Whole Home", items: ["All rooms vacuumed","All hard floors mopped","All mirrors & glass cleaned","Cobwebs removed","Interior doors & frames wiped","Hallways & stairs cleaned","All trash cans emptied","Eco-friendly products available"] },
   { icon: "➕", title: "Available Add-Ons", extra: true, items: ["Inside oven (+$45)","Inside refrigerator (+$35)","Interior windows (+$50)","Laundry wash & dry (+$30)","Inside cabinets (+$40)","Garage sweep (+$60)","Patio / balcony (+$55)","Wall spot cleaning (+$70)"] },
+];
+
+const DEEP_CLEAN_EXTRAS = [
+  "Baseboards hand-wiped throughout",
+  "Door frames, door tops & interior doors washed",
+  "Light fixtures & ceiling fan blades wiped",
+  "Air vent & register covers dusted",
+  "Window sills, tracks & frames detailed",
+  "Shower door tracks & glass descaled",
+  "Tile grout scrubbed in bathrooms",
+  "Cabinet fronts degreased",
+  "Behind & under moveable furniture vacuumed",
+  "Switch plates, outlets & handrails wiped",
+  "Under & behind the toilet detailed",
+  "Trash cans wiped inside & out",
 ];
 
 const PRICING_CARDS = [
