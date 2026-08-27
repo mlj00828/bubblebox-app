@@ -195,6 +195,7 @@ function BookPageInner() {
     // Job scope, stated first so the cleaner sees it before anything else.
     // The API has no bedroom/bathroom fields, so this line is how room counts
     // and the supplies decision reach admin, the job card, and pro emails.
+    const arrivalNote = state.time ? `Arrival window: ${state.time}` : "";
     const scopeNote = [
       `${state.bedrooms} bed`,
       `${state.bathrooms} bath`,
@@ -205,7 +206,7 @@ function BookPageInner() {
       ? "SUPPLIES: customer provides ($10 discount applied)."
       : "SUPPLIES: cleaner brings all supplies.";
     const promoNote = state.promoStatus === "valid" ? `Promo code ${state.promoCode} applied ($${Math.round(state.promoDiscount / 100)} off).` : "";
-    const notes = [scopeNote, suppliesNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : "", state.specialInstructions, promoNote, `Total: $${calcTotal()}`].filter(Boolean).join(" | ");
+    const notes = [arrivalNote, scopeNote, suppliesNote, addonNames.length ? "Add-ons: " + addonNames.join(", ") : "", state.specialInstructions, promoNote, `Total: $${calcTotal()}`].filter(Boolean).join(" | ");
 
     const windowMap: Record<string,Window> = { "8:00 AM":"morning","9:00 AM":"morning","10:00 AM":"morning","11:00 AM":"morning","12:00 PM":"afternoon","1:00 PM":"afternoon","2:00 PM":"afternoon","3:00 PM":"afternoon","4:00 PM":"afternoon","5:00 PM":"evening","6:00 PM":"evening","7:00 PM":"evening","8:00 PM":"evening" };
 
@@ -219,6 +220,9 @@ function BookPageInner() {
         zip: state.zip,
         preferred_date: state.date,
         preferred_window: windowMap[state.time] || "morning",
+        // The exact hour the customer chose. preferred_window is kept for
+        // dispatch/scheduling logic, but this is what everyone is shown.
+        preferred_time: state.time,
         address_line: addressLine,
         notes: notes || undefined,
         customer: { name: `${state.firstName} ${state.lastName}`.trim(), phone: phoneE164, email: state.email || undefined },
@@ -394,6 +398,40 @@ function Step1({ state, update }: { state: BookingState; update: (p: Partial<Boo
           );
         })}
       </div>
+      {(() => {
+        const svc = SERVICES.find((x) => x.id === state.service);
+        if (!svc) return null;
+        return (
+          <div style={{ marginTop: 18, background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)", borderRadius: 16, padding: "18px 20px" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--color-ink)", marginBottom: 4 }}>
+              What&apos;s included in your {svc.name.toLowerCase()}
+            </div>
+            <p style={{ fontSize: 13, color: "var(--color-ink-mid)", lineHeight: 1.6, margin: "0 0 10px" }}>
+              Every room gets our full checklist — kitchen, bathrooms, bedrooms and living areas
+              dusted, vacuumed, mopped, disinfected and trash emptied.
+            </p>
+            {svc.extras && (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "var(--color-accent-mid)", margin: "10px 0 6px" }}>
+                  Plus, because this is a {svc.name.toLowerCase()}:
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 5 }}>
+                  {svc.extras.map((e) => (
+                    <li key={e} style={{ fontSize: 12.5, color: "var(--color-ink-mid)", display: "flex", gap: 7, lineHeight: 1.45 }}>
+                      <span style={{ color: "var(--color-accent)", fontWeight: 800, flexShrink: 0 }}>✓</span>{e}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p style={{ fontSize: 12, color: "var(--color-muted)", margin: "12px 0 0", lineHeight: 1.5 }}>
+              {svc.includedAddons?.length
+                ? `${svc.includedAddons.join(" and ")} are included in this service. Other add-ons — inside oven, inside refrigerator, laundry — can be added next.`
+                : "Inside the oven, inside the refrigerator, interior windows and laundry are optional add-ons you can choose next."}
+            </p>
+          </div>
+        );
+      })()}
       <style>{`@media(min-width:540px){.service-grid-book{grid-template-columns:repeat(3,1fr)!important}}`}</style>
     </>
   );
