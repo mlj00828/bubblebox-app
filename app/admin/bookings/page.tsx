@@ -241,6 +241,26 @@ function BookingModal({
               <div className="detail-label">ZIP</div>
               <div className="detail-value admin-mono">{booking.zip}</div>
             </div>
+            <div className="detail-row">
+              <div className="detail-label">Size</div>
+              <div className="detail-value">
+                {booking.bedrooms !== null && booking.bedrooms !== undefined
+                  ? `${booking.bedrooms} bed · ${booking.bathrooms ?? 0} bath${booking.half_baths ? ` · ${booking.half_baths} half` : ""}`
+                  : "— (booked before size tracking)"}
+              </div>
+            </div>
+            <div className="detail-row">
+              <div className="detail-label">Supplies</div>
+              <div className="detail-value" style={{ fontWeight: 700, color: booking.supplies_provided ? "#15803d" : "#b45309" }}>
+                {booking.supplies_provided ? "Customer provides" : "Cleaner brings all"}
+              </div>
+            </div>
+            {booking.frequency && booking.frequency !== "once" && (
+              <div className="detail-row">
+                <div className="detail-label">Frequency</div>
+                <div className="detail-value">{booking.frequency}</div>
+              </div>
+            )}
             <div className="detail-row" style={{ gridColumn: "1 / -1" }}>
               <div className="detail-label">Address</div>
               <div className="detail-value">{booking.address_line || "—"}</div>
