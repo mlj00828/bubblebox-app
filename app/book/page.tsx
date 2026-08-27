@@ -626,30 +626,45 @@ function Step8({ state, update, calcTotal, calcSubtotal }: { state: BookingState
   const [secretLoading, setSecretLoading] = useState(false);
   const [secretError, setSecretError] = useState<string | null>(null);
 
-  // Re-create the client secret whenever the total changes (e.g. after applying/removing a promo)
+  // The authorization hold must match what the customer will actually be
+  // charged. The intent is created when this step mounts — often BEFORE a
+  // promo code is entered — so it is re-created whenever the amount changes.
+  // We send the PRE-promo subtotal and let the backend apply the discount,
+  // so the discount is calculated in exactly one place.
+  const subtotalCents = calcSubtotal() * 100;
+  const activePromo = state.promoStatus === "valid" ? state.promoCode : undefined;
+  const [intentKey, setIntentKey] = useState<string | null>(null);
+  const wantedKey = `${subtotalCents}:${activePromo ?? ""}`;
+
   useEffect(() => {
-    if (state.clientSecret) return;
-    const total = calcTotal();
-    if (total <= 0) return;
+    if (subtotalCents <= 0) return;
+    if (intentKey === wantedKey && state.clientSecret) return;
     setSecretLoading(true);
+    setSecretError(null);
     fetch(`${STRIPE_API_BASE}/api/payments/create-intent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount_cents: total * 100,
+        amount_cents: subtotalCents,
         customer_email: state.email || undefined,
         customer_name: `${state.firstName} ${state.lastName}`.trim() || undefined,
-        promo_code: state.promoStatus === "valid" ? state.promoCode : undefined,
+        customer_phone: state.phone || undefined,
+        promo_code: activePromo,
       }),
     })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data?.client_secret) update({ clientSecret: j.data.client_secret });
-        else setSecretError("Couldn't initialize payment. Please try again.");
+        if (j?.data?.client_secret) {
+          update({ clientSecret: j.data.client_secret });
+          setIntentKey(wantedKey);
+        } else {
+          setSecretError("Couldn't initialize payment. Please try again.");
+        }
       })
       .catch(() => setSecretError("Couldn't reach payment server."))
       .finally(() => setSecretLoading(false));
-  }, [state.clientSecret]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedKey]);
 
   const subtotal = calcSubtotal();
   const total = calcTotal();
