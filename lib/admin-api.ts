@@ -53,6 +53,7 @@ export interface AdminBooking {
   half_baths: number | null;
   supplies_provided: number | null;
   frequency: string | null;
+  preferred_time: string | null;
   created_at: string;
   updated_at: string;
   customer_name: string | null;
