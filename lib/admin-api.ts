@@ -384,3 +384,74 @@ export function assignBooking(id: string, pro_id: string) {
     { method: "POST", body: JSON.stringify({ pro_id }) }
   );
 }
+
+
+// ─── Payouts ───────────────────────────────────────────────
+export interface Payout {
+  id: number;
+  booking_id: string;
+  pro_id: string;
+  pro_name: string | null;
+  pro_email: string | null;
+  pro_payout_method: string | null;
+  pro_payout_handle: string | null;
+  w9_received: number | null;
+  gross_cents: number;
+  amount_cents: number;
+  bonus_cents: number;
+  status: "owed" | "paid" | "void";
+  method: string | null;
+  reference: string | null;
+  note: string | null;
+  earned_at: string;
+  paid_at: string | null;
+  preferred_date: string | null;
+  service_id: string | null;
+  zip: string | null;
+}
+
+export interface PayoutSummary {
+  pro_id: string;
+  full_name: string;
+  email: string | null;
+  w9_received: number | null;
+  payout_method: string | null;
+  payout_handle: string | null;
+  owed_cents: number;
+  paid_cents: number;
+  ytd_paid_cents: number;
+  job_count: number;
+  needs_1099: boolean;
+}
+
+export function fetchPayouts(status: "owed" | "paid" | "all" = "all") {
+  return adminFetch<{
+    data: { items: Payout[]; summary: PayoutSummary[]; totals: { owed_cents: number; paid_cents: number }; year: number };
+  }>(`/api/admin/payouts?status=${status}`);
+}
+
+export function markPayoutPaid(
+  id: number,
+  body: { method: string; reference?: string; bonus_cents?: number; note?: string }
+) {
+  return adminFetch<{ data: Payout }>(`/api/admin/payouts/${id}/pay`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function unmarkPayoutPaid(id: number) {
+  return adminFetch<{ data: { id: number; status: string } }>(`/api/admin/payouts/${id}/unpay`, {
+    method: "POST",
+  });
+}
+
+export function updateProTax(
+  proId: string,
+  body: { w9_received?: boolean; payout_method?: string; payout_handle?: string }
+) {
+  return adminFetch<{ data: unknown }>(`/api/admin/pros/${proId}/tax`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
