@@ -14,6 +14,7 @@ import {
   fmtCents,
   fmtDateTime,
 } from "@/lib/admin-api";
+import { applyDiscount } from "@/lib/admin-api";
 
 const STATUS_FILTERS: Array<BookingStatus | "all"> = [
   "all", "requested", "broadcasting", "confirmed", "enroute", "in_progress", "completed", "cancelled",
@@ -216,6 +217,9 @@ function BookingModal({
               }}
             />
           )}
+          {["pending", "authorized"].includes(booking.payment_status) && !["cancelled", "completed"].includes(booking.status) && (
+            <PricingSection booking={booking} />
+          )}
           <div className="detail-grid">
             <div className="detail-row">
               <div className="detail-label">Customer</div>
@@ -388,6 +392,90 @@ function AssignSection({
         </button>
       </div>
       {err && <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c" }}>{err}</div>}
+    </div>
+  );
+}
+
+
+// ─── Pricing adjustment ────────────────────────────────────
+// Honor a forgotten promo code or apply a manual discount while the charge
+// is still a hold. "BubbleBox absorbs" keeps the cleaner paid on full price.
+function PricingSection({ booking }: { booking: AdminBooking }) {
+  const [mode, setMode] = useState<"promo" | "amount">("promo");
+  const [code, setCode] = useState("BUBBLE20");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("Customer forgot promo code at checkout");
+  const [absorb, setAbsorb] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const base = booking.estimated_total_cents ?? 0;
+  const current = booking.final_total_cents ?? base;
+  const basis = booking.payout_basis_cents ?? current;
+  const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+  async function apply() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await applyDiscount(booking.id, {
+        promo_code: mode === "promo" ? code.trim() : undefined,
+        amount_cents: mode === "amount" ? Math.round(parseFloat(amount || "0") * 100) : undefined,
+        reason: reason.trim(),
+        absorb,
+      });
+      setDone(
+        `Customer now pays ${money(r.customer_pays_cents)}. Cleaner paid on ${money(r.cleaner_paid_on_cents)} → ${money(r.cleaner_payout_cents)}.`
+      );
+      setTimeout(() => window.location.reload(), 1600);
+    } catch (e: any) {
+      setErr(e?.message || "Couldn't apply discount");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#92400e" }}>Pricing</div>
+        <div style={{ fontSize: 12, color: "#92400e" }}>
+          Work: <strong>{money(base)}</strong>
+          {booking.discount_cents ? <> · Discount: <strong>−{money(booking.discount_cents)}</strong>{booking.promo_code ? ` (${booking.promo_code})` : ""}</> : null}
+          {" · "}Customer pays: <strong>{money(current)}</strong>
+          {" · "}Cleaner paid on: <strong>{money(basis)}</strong>
+        </div>
+      </div>
+
+      {done ? (
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>✓ {done}</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="f-input" value={mode} onChange={(e) => setMode(e.target.value as "promo" | "amount")} style={{ width: 150 }}>
+              <option value="promo">Apply promo code</option>
+              <option value="amount">Manual $ off</option>
+            </select>
+            {mode === "promo" ? (
+              <input className="f-input" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="BUBBLE20" style={{ width: 130 }} />
+            ) : (
+              <input className="f-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="20.00" inputMode="decimal" style={{ width: 100 }} />
+            )}
+            <input className="f-input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" style={{ flex: 1, minWidth: 200 }} />
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#92400e", margin: "10px 0" }}>
+            <input type="checkbox" checked={absorb} onChange={(e) => setAbsorb(e.target.checked)} />
+            <span><strong>BubbleBox absorbs the discount</strong> — cleaner is still paid on the full {money(base)}. Uncheck to have the cleaner share it.</span>
+          </label>
+          <button className="btn btn-green" onClick={apply} disabled={busy || reason.trim().length < 3 || (mode === "amount" && !amount)}>
+            {busy ? "Applying…" : "Apply adjustment"}
+          </button>
+          {err && <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c" }}>{err}</div>}
+          <div style={{ fontSize: 11, color: "#b45309", marginTop: 8 }}>
+            Only available while the charge is a hold. After capture, use Payments → Refund instead.
+          </div>
+        </>
+      )}
     </div>
   );
 }
