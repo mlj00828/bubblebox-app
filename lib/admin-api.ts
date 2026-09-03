@@ -54,6 +54,7 @@ export interface AdminBooking {
   supplies_provided: number | null;
   frequency: string | null;
   preferred_time: string | null;
+  payout_basis_cents?: number | null;
   created_at: string;
   updated_at: string;
   customer_name: string | null;
@@ -378,6 +379,26 @@ export function refundPayment(
 }
 
 // Manually assign an open booking to an approved pro (dispatch override).
+export interface DiscountResult {
+  booking_id: string;
+  promo_code: string | null;
+  discount_cents: number;
+  customer_pays_cents: number;
+  cleaner_paid_on_cents: number;
+  cleaner_payout_cents: number;
+  absorbed_by_bubblebox: boolean;
+}
+
+export function applyDiscount(
+  id: string,
+  body: { promo_code?: string; amount_cents?: number; reason: string; absorb: boolean }
+) {
+  return adminFetch<DiscountResult>(`/api/admin/bookings/${id}/discount`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function assignBooking(id: string, pro_id: string) {
   return adminFetch<{ booking_id: string; status: BookingStatus; pro_id: string; pro_name: string }>(
     `/api/admin/bookings/${id}/assign`,
