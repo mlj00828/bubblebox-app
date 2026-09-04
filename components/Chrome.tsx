@@ -105,7 +105,6 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
               {label}
             </Link>
           ))}
-          {rightSlot}
           <Link
             href="/book"
             style={{
@@ -187,6 +186,7 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
               Sign in
             </Link>
           )}
+          {rightSlot && <div style={{ marginLeft: 12 }}>{rightSlot}</div>}
         </nav>
 
         {/* Mobile hamburger */}
