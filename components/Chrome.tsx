@@ -79,7 +79,7 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
+        <nav className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, flexWrap: "nowrap" }}>
           {NAV_LINKS.map(([href, label]) => (
             <Link
               key={href}
@@ -187,12 +187,15 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
               Sign in
             </Link>
           )}
+          {rightSlot && <div style={{ marginLeft: 10, flexShrink: 0 }}>{rightSlot}</div>}
         </nav>
 
-        {/* Language switcher slot — outside the desktop nav so it stays
-            visible on mobile, where the nav collapses into the hamburger. */}
+        {/* Mobile copy of the switcher — the desktop nav (which holds the
+            other copy) is hidden below 900px. */}
         {rightSlot && (
-          <div style={{ marginLeft: "auto", marginRight: 8, flexShrink: 0 }}>{rightSlot}</div>
+          <div className="mobile-lang" style={{ display: "none", marginLeft: "auto", marginRight: 10, flexShrink: 0 }}>
+            {rightSlot}
+          </div>
         )}
 
         {/* Mobile hamburger */}
@@ -262,6 +265,7 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
         @media (max-width: 900px) {
           .desktop-nav { display: none !important; }
           .hamburger-btn { display: flex !important; }
+          .mobile-lang { display: flex !important; }
         }
       `}</style>
     </header>
