@@ -5,7 +5,7 @@ import { LANGS, type Lang } from "@/lib/i18n-join";
 // Real SVG flags. Emoji flags (🇺🇸) do not render on Windows — it shows the
 // letter pair instead — so the flags are drawn inline to work everywhere.
 function Flag({ id }: { id: Lang }) {
-  const common = { width: 22, height: 15, viewBox: "0 0 22 15" } as const;
+  const common = { width: 20, height: 14, viewBox: "0 0 22 15" } as const;
   if (id === "en") {
     return (
       <svg {...common} aria-hidden>
@@ -44,7 +44,7 @@ export function FlagSwitcher({
   compact?: boolean;
 }) {
   return (
-    <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+    <div style={{ display: "flex", gap: 2, alignItems: "center", flexShrink: 0 }}>
       {LANGS.map((l) => {
         const active = lang === l.id;
         return (
@@ -59,11 +59,11 @@ export function FlagSwitcher({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              padding: compact ? 3 : 4,
+              padding: 2,
               borderRadius: 6,
               cursor: "pointer",
               background: active ? "var(--color-surface)" : "transparent",
-              border: `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
+              border: `1.5px solid ${active ? "var(--color-accent)" : "transparent"}`,
               opacity: active ? 1 : 0.5,
               transition: "all 0.15s",
               lineHeight: 0,
