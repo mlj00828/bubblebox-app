@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "@/components/Chrome";
 import { toE164USPhone } from "@/lib/api";
-import { JOIN_COPY, LANGS, type Lang } from "@/lib/i18n-join";
+import { JOIN_COPY, type Lang } from "@/lib/i18n-join";
+import { FlagSwitcher } from "@/components/FlagSwitcher";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
@@ -123,29 +124,7 @@ export default function JoinPage() {
   if (submitted) {
     return (
       <>
-        <Header />
-      {/* Language switcher — floating, flags only */}
-      <div style={{ position: "fixed", top: 76, right: 16, zIndex: 60, display: "flex", gap: 6, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", border: "1px solid var(--color-rule)", borderRadius: 50, padding: 5, boxShadow: "0 2px 12px rgba(13,27,62,0.12)" }}>
-        {LANGS.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setLang(l.id)}
-            title={l.label}
-            aria-label={l.label}
-            style={{
-              width: 34, height: 34, borderRadius: "50%",
-              background: lang === l.id ? "var(--color-accent)" : "transparent",
-              border: lang === l.id ? "2px solid var(--color-accent)" : "2px solid transparent",
-              fontSize: 17, lineHeight: 1, cursor: "pointer", padding: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              opacity: lang === l.id ? 1 : 0.55, transition: "all 0.15s",
-            }}
-          >
-            {l.flag}
-          </button>
-        ))}
-      </div>
+        <Header rightSlot={<FlagSwitcher lang={lang} onChange={setLang} />} />
         <main style={{ minHeight: "70vh", padding: "60px 24px", background: "var(--color-paper)" }}>
           <div style={{ maxWidth: 560, margin: "0 auto", background: "white", border: "1.5px solid var(--color-rule)", borderRadius: 16, padding: 40, textAlign: "center", boxShadow: "var(--shadow-card)" }}>
             <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
@@ -173,29 +152,7 @@ export default function JoinPage() {
 
   return (
     <>
-      <Header />
-      {/* Language switcher — floating, flags only */}
-      <div style={{ position: "fixed", top: 76, right: 16, zIndex: 60, display: "flex", gap: 6, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", border: "1px solid var(--color-rule)", borderRadius: 50, padding: 5, boxShadow: "0 2px 12px rgba(13,27,62,0.12)" }}>
-        {LANGS.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setLang(l.id)}
-            title={l.label}
-            aria-label={l.label}
-            style={{
-              width: 34, height: 34, borderRadius: "50%",
-              background: lang === l.id ? "var(--color-accent)" : "transparent",
-              border: lang === l.id ? "2px solid var(--color-accent)" : "2px solid transparent",
-              fontSize: 17, lineHeight: 1, cursor: "pointer", padding: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              opacity: lang === l.id ? 1 : 0.55, transition: "all 0.15s",
-            }}
-          >
-            {l.flag}
-          </button>
-        ))}
-      </div>
+      <Header rightSlot={<FlagSwitcher lang={lang} onChange={setLang} />} />
 
       {/* HERO */}
       <section style={{ padding: "60px 24px 48px", background: "linear-gradient(135deg, var(--color-accent-deep) 0%, var(--color-accent-mid) 50%, var(--color-accent) 100%)", color: "white", textAlign: "center", position: "relative", overflow: "hidden" }}>
@@ -211,7 +168,7 @@ export default function JoinPage() {
             {t.heroSub}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 28 }}>
-            {["💵 Daily pay", "🗓️ Flexible schedule", "📍 Work near home", "💰 Keep your tips", "🎓 Training provided", "🚀 No experience needed"].map(p => (
+            {t.heroPills.map(p => (
               <span key={p} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 99, padding: "8px 14px", fontSize: 13, fontWeight: 600 }}>{p}</span>
             ))}
           </div>
@@ -312,7 +269,7 @@ export default function JoinPage() {
                       {t.experience.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </Field>
-                  <Field label={t.bioLabel} hint="optional">
+                  <Field label={t.bioLabel} hint={t.optional}>
                     <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder={t.bioPlaceholder} rows={3} style={{ ...styles.input, resize: "vertical", minHeight: 90 }} />
                   </Field>
                   <Field label={t.servicesLabel}>
@@ -348,10 +305,10 @@ export default function JoinPage() {
                 <div style={styles.formSectionTitle}>{t.secLogistics}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
                   <Field label={t.transportLabel} required>
-                    <RadioGrid items={[{ id: "yes", label: "🚗 Yes, I have a car" }, { id: "no", label: "🚌 No, I use transit" }]} value={transport} onChange={v => setTransport(v as "yes" | "no")} />
+                    <RadioGrid items={[{ id: "yes", label: t.transportYes }, { id: "no", label: t.transportNo }]} value={transport} onChange={v => setTransport(v as "yes" | "no")} />
                   </Field>
                   <Field label={t.suppliesLabel}>
-                    <RadioGrid items={[{ id: "yes", label: "✅ Yes, I have supplies" }, { id: "no", label: "❌ No, I'll need them" }]} value={supplies} onChange={v => setSupplies(v as "yes" | "no")} />
+                    <RadioGrid items={[{ id: "yes", label: t.suppliesYes }, { id: "no", label: t.suppliesNo }]} value={supplies} onChange={v => setSupplies(v as "yes" | "no")} />
                   </Field>
                 </div>
               </div>
@@ -381,7 +338,7 @@ export default function JoinPage() {
                   {submitting ? t.submitting : t.submit}
                 </button>
                 <div style={{ marginTop: 12, fontSize: 12, color: "var(--color-muted)", textAlign: "center", lineHeight: 1.5 }}>
-                  Applications are reviewed within 2–3 business days. We'll contact you at the email and phone number provided. Questions? Call us at <a href="tel:+16788204881" style={{ color: "var(--color-accent)" }}>(678) 820-4881</a>
+                  {t.footerNote} <a href="tel:+16788204881" style={{ color: "var(--color-accent)" }}>(678) 820-4881</a>
                 </div>
               </div>
             </div>
