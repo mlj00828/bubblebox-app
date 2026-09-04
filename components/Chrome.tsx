@@ -186,8 +186,13 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
               Sign in
             </Link>
           )}
-          {rightSlot && <div style={{ marginLeft: 12 }}>{rightSlot}</div>}
         </nav>
+
+        {/* Language switcher slot — outside the desktop nav so it stays
+            visible on mobile, where the nav collapses into the hamburger. */}
+        {rightSlot && (
+          <div style={{ marginLeft: "auto", marginRight: 8, flexShrink: 0 }}>{rightSlot}</div>
+        )}
 
         {/* Mobile hamburger */}
         <button
