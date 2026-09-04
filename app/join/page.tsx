@@ -124,22 +124,25 @@ export default function JoinPage() {
     return (
       <>
         <Header />
-      {/* Language switcher — cleaner-facing pages are bilingual by design */}
-      <div style={{ background: "var(--color-surface)", borderBottom: "1px solid var(--color-surface-mid)", padding: "10px 24px", display: "flex", justifyContent: "center", gap: 8 }}>
+      {/* Language switcher — floating, flags only */}
+      <div style={{ position: "fixed", top: 76, right: 16, zIndex: 60, display: "flex", gap: 6, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", border: "1px solid var(--color-rule)", borderRadius: 50, padding: 5, boxShadow: "0 2px 12px rgba(13,27,62,0.12)" }}>
         {LANGS.map((l) => (
           <button
             key={l.id}
             type="button"
             onClick={() => setLang(l.id)}
+            title={l.label}
+            aria-label={l.label}
             style={{
-              background: lang === l.id ? "var(--color-accent)" : "white",
-              color: lang === l.id ? "white" : "var(--color-ink-mid)",
-              border: `1.5px solid ${lang === l.id ? "var(--color-accent)" : "var(--color-rule)"}`,
-              borderRadius: 50, padding: "6px 16px", fontSize: 13, fontWeight: 700,
-              cursor: "pointer", fontFamily: "inherit",
+              width: 34, height: 34, borderRadius: "50%",
+              background: lang === l.id ? "var(--color-accent)" : "transparent",
+              border: lang === l.id ? "2px solid var(--color-accent)" : "2px solid transparent",
+              fontSize: 17, lineHeight: 1, cursor: "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: lang === l.id ? 1 : 0.55, transition: "all 0.15s",
             }}
           >
-            {l.flag} {l.label}
+            {l.flag}
           </button>
         ))}
       </div>
@@ -171,22 +174,25 @@ export default function JoinPage() {
   return (
     <>
       <Header />
-      {/* Language switcher — cleaner-facing pages are bilingual by design */}
-      <div style={{ background: "var(--color-surface)", borderBottom: "1px solid var(--color-surface-mid)", padding: "10px 24px", display: "flex", justifyContent: "center", gap: 8 }}>
+      {/* Language switcher — floating, flags only */}
+      <div style={{ position: "fixed", top: 76, right: 16, zIndex: 60, display: "flex", gap: 6, background: "rgba(255,255,255,0.94)", backdropFilter: "blur(8px)", border: "1px solid var(--color-rule)", borderRadius: 50, padding: 5, boxShadow: "0 2px 12px rgba(13,27,62,0.12)" }}>
         {LANGS.map((l) => (
           <button
             key={l.id}
             type="button"
             onClick={() => setLang(l.id)}
+            title={l.label}
+            aria-label={l.label}
             style={{
-              background: lang === l.id ? "var(--color-accent)" : "white",
-              color: lang === l.id ? "white" : "var(--color-ink-mid)",
-              border: `1.5px solid ${lang === l.id ? "var(--color-accent)" : "var(--color-rule)"}`,
-              borderRadius: 50, padding: "6px 16px", fontSize: 13, fontWeight: 700,
-              cursor: "pointer", fontFamily: "inherit",
+              width: 34, height: 34, borderRadius: "50%",
+              background: lang === l.id ? "var(--color-accent)" : "transparent",
+              border: lang === l.id ? "2px solid var(--color-accent)" : "2px solid transparent",
+              fontSize: 17, lineHeight: 1, cursor: "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: lang === l.id ? 1 : 0.55, transition: "all 0.15s",
             }}
           >
-            {l.flag} {l.label}
+            {l.flag}
           </button>
         ))}
       </div>
