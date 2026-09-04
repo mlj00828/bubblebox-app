@@ -35,7 +35,7 @@ function useAuthEmail(): string | null {
   return email;
 }
 
-export function Header() {
+export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const email = useAuthEmail();
   const initial = email ? email[0].toUpperCase() : "";
@@ -105,6 +105,7 @@ export function Header() {
               {label}
             </Link>
           ))}
+          {rightSlot}
           <Link
             href="/book"
             style={{
