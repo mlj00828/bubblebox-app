@@ -51,6 +51,13 @@ export interface JoinCopy {
   suppliesLabel: string;
   yes: string;
   no: string;
+  heroPills: string[];
+  transportYes: string;
+  transportNo: string;
+  suppliesYes: string;
+  suppliesNo: string;
+  optional: string;
+  footerNote: string;
   // consent
   workAuthTitle: string;
   workAuthText: string;
@@ -134,6 +141,13 @@ const en: JoinCopy = {
   suppliesLabel: "Do you have your own cleaning supplies?",
   yes: "Yes",
   no: "No",
+  heroPills: ["💵 Weekly pay", "🗓️ Flexible schedule", "📍 Work near home", "💰 Keep your tips", "📋 Clear checklist", "🚀 No experience needed"],
+  transportYes: "🚗 Yes, I have a car",
+  transportNo: "🚌 No, I use transit",
+  suppliesYes: "✅ Yes, I have supplies",
+  suppliesNo: "❌ No, I'll need them",
+  optional: "optional",
+  footerNote: "Applications are reviewed within 2–3 business days. We'll contact you at the email and phone number provided.",
   workAuthTitle: "Work authorization",
   workAuthText:
     "I am legally authorized to work as an independent contractor in the United States. I understand a W-9 with a valid SSN or ITIN is required before my first payout.",
@@ -240,6 +254,13 @@ const es: JoinCopy = {
   suppliesLabel: "¿Tienes tus propios productos de limpieza?",
   yes: "Sí",
   no: "No",
+  heroPills: ["💵 Pago semanal", "🗓️ Horario flexible", "📍 Trabaja cerca", "💰 Quédate las propinas", "📋 Lista clara", "🚀 Sin experiencia necesaria"],
+  transportYes: "🚗 Sí, tengo carro",
+  transportNo: "🚌 No, uso transporte público",
+  suppliesYes: "✅ Sí, tengo productos",
+  suppliesNo: "❌ No, los voy a necesitar",
+  optional: "opcional",
+  footerNote: "Las solicitudes se revisan en 2–3 días hábiles. Te contactaremos al correo y teléfono que nos diste.",
   workAuthTitle: "Autorización de trabajo",
   workAuthText:
     "Estoy legalmente autorizado para trabajar como contratista independiente en los Estados Unidos. Entiendo que se requiere un formulario W-9 con un SSN o ITIN válido antes de mi primer pago.",
@@ -346,6 +367,13 @@ const pt: JoinCopy = {
   suppliesLabel: "Você tem seus próprios produtos de limpeza?",
   yes: "Sim",
   no: "Não",
+  heroPills: ["💵 Pagamento semanal", "🗓️ Horário flexível", "📍 Trabalhe perto", "💰 Fique com as gorjetas", "📋 Lista clara", "🚀 Sem experiência necessária"],
+  transportYes: "🚗 Sim, tenho carro",
+  transportNo: "🚌 Não, uso transporte público",
+  suppliesYes: "✅ Sim, tenho produtos",
+  suppliesNo: "❌ Não, vou precisar",
+  optional: "opcional",
+  footerNote: "As inscrições são analisadas em 2–3 dias úteis. Entraremos em contato pelo e-mail e telefone informados.",
   workAuthTitle: "Autorização de trabalho",
   workAuthText:
     "Estou legalmente autorizado a trabalhar como contratante independente nos Estados Unidos. Entendo que um formulário W-9 com SSN ou ITIN válido é necessário antes do meu primeiro pagamento.",
