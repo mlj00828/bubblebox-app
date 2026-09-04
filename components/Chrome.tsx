@@ -51,6 +51,7 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
         WebkitBackdropFilter: "blur(12px)",
         borderBottom: "1px solid var(--color-rule)",
         boxShadow: "0 1px 12px rgba(29,127,232,0.07)",
+        overflowX: "hidden",
       }}
     >
       <div
@@ -61,7 +62,7 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
           height: 68,
           display: "flex",
           alignItems: "center",
-          gap: 32,
+          gap: 16,
         }}
       >
         {/* Logo */}
@@ -78,7 +79,7 @@ export function Header({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
+        <nav className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
           {NAV_LINKS.map(([href, label]) => (
             <Link
               key={href}
