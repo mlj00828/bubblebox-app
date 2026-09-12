@@ -14,7 +14,7 @@ import {
   fmtCents,
   fmtDateTime,
 } from "@/lib/admin-api";
-import { applyDiscount } from "@/lib/admin-api";
+import { applyDiscount, fetchBookingOffers, type OfferLogItem } from "@/lib/admin-api";
 
 const STATUS_FILTERS: Array<BookingStatus | "all"> = [
   "all", "requested", "broadcasting", "confirmed", "enroute", "in_progress", "completed", "cancelled",
@@ -220,6 +220,7 @@ function BookingModal({
           {["pending", "authorized"].includes(booking.payment_status) && !["cancelled", "completed"].includes(booking.status) && (
             <PricingSection booking={booking} />
           )}
+          <DispatchLog bookingId={booking.id} />
           <div className="detail-grid">
             <div className="detail-row">
               <div className="detail-label">Customer</div>
@@ -475,6 +476,84 @@ function PricingSection({ booking }: { booking: AdminBooking }) {
             Only available while the charge is a hold. After capture, use Payments → Refund instead.
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Dispatch activity ─────────────────────────────────────
+// Who was offered this job and what they did with it — including the reason
+// a cleaner gave when they released it.
+function DispatchLog({ bookingId }: { bookingId: string }) {
+  const [items, setItems] = useState<OfferLogItem[] | null>(null);
+  const [open, setOpen] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let gone = false;
+    fetchBookingOffers(bookingId)
+      .then((r) => { if (!gone) setItems(r.data.items); })
+      .catch((e) => { if (!gone) setErr(e instanceof Error ? e.message : "Couldn't load dispatch activity"); });
+    return () => { gone = true; };
+  }, [bookingId]);
+
+  const STATE: Record<string, { label: string; bg: string; fg: string }> = {
+    accept: { label: "Accepted", bg: "#dcfce7", fg: "#15803d" },
+    decline: { label: "Passed", bg: "#fee2e2", fg: "#b91c1c" },
+    cancelled: { label: "Released after accepting", bg: "#fef3c7", fg: "#92400e" },
+    expired: { label: "No response", bg: "#f1f5f9", fg: "#64748b" },
+    pending: { label: "Waiting", bg: "#dbeafe", fg: "#1e40af" },
+  };
+
+  const passed = items?.filter((i) => i.state === "decline" || i.state === "cancelled").length ?? 0;
+
+  return (
+    <div style={{ background: "white", border: "1px solid var(--color-rule, #e5eaf2)", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit" }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B3E" }}>
+          Dispatch activity {items ? `(${items.length} offered${passed ? `, ${passed} passed` : ""})` : ""} {open ? "▾" : "▸"}
+        </div>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          {err && <div style={{ fontSize: 12, color: "#b91c1c" }}>{err}</div>}
+          {!items && !err && <div style={{ fontSize: 12, color: "#9ca3af" }}>Loading…</div>}
+          {items && items.length === 0 && (
+            <div style={{ fontSize: 12, color: "#9ca3af" }}>No cleaners have been offered this job yet.</div>
+          )}
+          {items?.map((i) => {
+            const st = STATE[i.state] ?? STATE.pending;
+            return (
+              <div key={i.pro_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, padding: "8px 0", borderTop: "1px solid #f1f5f9" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0D1B3E" }}>{i.pro_name ?? i.pro_id}</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af" }}>
+                    offered {i.sent_at ? new Date(i.sent_at).toLocaleString() : "—"}
+                    {i.responded_at ? ` · responded ${new Date(i.responded_at).toLocaleString()}` : ""}
+                  </div>
+                  {i.cancel_reason && (
+                    <div style={{ fontSize: 12, color: "#92400e", marginTop: 3 }}>
+                      “{i.cancel_reason}”
+                      {i.cancel_hours_notice !== null && (
+                        <span style={{ color: "#9ca3af" }}>
+                          {" "}— {Math.round(i.cancel_hours_notice)}h notice{i.late_cancel ? " (late)" : ""}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <span style={{ background: st.bg, color: st.fg, borderRadius: 6, padding: "3px 9px", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {st.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
