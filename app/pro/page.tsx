@@ -117,6 +117,19 @@ interface EarningsResponse {
   }>;
 }
 
+// Always call this immediately before a request instead of trusting a token
+// held in React state. supabase.auth.getSession() returns the current token
+// and transparently refreshes it if it has expired — which is what kept
+// logging cleaners out between accepting a job and arriving at it.
+async function freshToken(fallback: string): Promise<string> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function ProPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -203,11 +216,19 @@ export default function ProPage() {
 
     init();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
         setAuthed(false);
         setMe(null);
         setAccessToken("");
+        return;
+      }
+      // Supabase access tokens expire after an hour and are refreshed in the
+      // background. Without this, React keeps the stale token and every call
+      // 401s — which looked to cleaners like being logged out mid-job.
+      if (session?.access_token) {
+        setAccessToken(session.access_token);
+        setAuthed(true);
       }
     });
 
@@ -488,7 +509,7 @@ function OffersTab({
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${await freshToken(accessToken)}`,
             "Content-Type": "application/json",
           },
         }
@@ -788,9 +809,10 @@ function JobCard({
     setBusy(true);
     setErr(null);
     try {
+      const tok = await freshToken(accessToken);
       const r = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/arrived`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) setErr(body?.error?.message || "Couldn't notify the customer");
@@ -813,7 +835,7 @@ function JobCard({
     try {
       const resp = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/status`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${await freshToken(accessToken)}`, "Content-Type": "application/json" },
         body: JSON.stringify({ status: next }),
       });
       const body = await resp.json().catch(() => ({}));
@@ -952,7 +974,7 @@ function JobCard({
               try {
                 const r = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/cancel`, {
                   method: "POST",
-                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+                  headers: { Authorization: `Bearer ${await freshToken(accessToken)}`, "Content-Type": "application/json" },
                   body: JSON.stringify({ reason: reason.trim() }),
                 });
                 const body = await r.json().catch(() => ({}));
@@ -1142,7 +1164,7 @@ function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string
       const url = `${pub.publicUrl}?v=${Date.now()}`;
       const r = await fetch(`${API_BASE}/api/pros/me/profile`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${await freshToken(accessToken)}`, "Content-Type": "application/json" },
         body: JSON.stringify({ photo_url: url }),
       });
       if (!r.ok) throw new Error("Couldn't save the photo");
@@ -1166,7 +1188,7 @@ function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string
     try {
       const r = await fetch(`${API_BASE}/api/pros/me/profile`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${await freshToken(accessToken)}`, "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phone.trim(), bio: bio.trim(), zip_codes: zipList }),
       });
       const body = await r.json().catch(() => ({}));
