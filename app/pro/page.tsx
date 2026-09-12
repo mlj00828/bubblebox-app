@@ -778,10 +778,33 @@ function JobCard({
   onStatusChange: (id: string, status: string) => void;
 }) {
   const [released, setReleased] = useState(false);
+  const [arrived, setArrived] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [captureNote, setCaptureNote] = useState<string | null>(null);
+
+  async function markArrived() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/pros/me/jobs/${j.id}/arrived`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) setErr(body?.error?.message || "Couldn't notify the customer");
+      else {
+        setArrived(true);
+        onStatusChange(j.id, "enroute");
+        setCaptureNote("Customer notified that you're at the door.");
+      }
+    } catch {
+      setErr("Network error — try again");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function setStatus(next: "enroute" | "in_progress" | "completed") {
     if (next === "completed" && !window.confirm("Mark this job complete? This charges the customer's card for the amount on the booking.")) return;
@@ -882,6 +905,11 @@ function JobCard({
               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(j.address_line + (j.zip ? " " + j.zip : ""))}`}
               target="_blank"
               rel="noreferrer"
+              onClick={() => {
+                // Opening directions means you're leaving — set enroute in the
+                // same tap so the customer is told without a second button.
+                if (j.status === "confirmed") setStatus("enroute");
+              }}
             >
               🧭 Navigate
             </a>
@@ -892,9 +920,19 @@ function JobCard({
             </button>
           )}
           {j.status === "enroute" && (
-            <button className="btn-accept" disabled={busy} onClick={() => setStatus("in_progress")}>
-              {busy ? "…" : "▶ Start job"}
-            </button>
+            <>
+              <button
+                className="btn-accept"
+                disabled={busy || arrived}
+                onClick={markArrived}
+                style={{ background: arrived ? "#94a3b8" : "linear-gradient(135deg,#f59e0b,#d97706)" }}
+              >
+                {busy ? "…" : arrived ? "✓ Customer notified" : "🚪 I've arrived"}
+              </button>
+              <button className="btn-accept" disabled={busy} onClick={() => setStatus("in_progress")}>
+                {busy ? "…" : "▶ Start job"}
+              </button>
+            </>
           )}
           {j.status === "in_progress" && (
             <button className="btn-accept" disabled={busy} onClick={() => setStatus("completed")}>
