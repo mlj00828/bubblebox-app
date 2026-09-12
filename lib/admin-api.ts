@@ -399,6 +399,26 @@ export function applyDiscount(
   });
 }
 
+export interface OfferLogItem {
+  pro_id: string;
+  pro_name: string | null;
+  pro_email: string | null;
+  pro_phone: string | null;
+  channel: string | null;
+  state: "pending" | "accept" | "decline" | "expired" | "cancelled";
+  sent_at: string | null;
+  responded_at: string | null;
+  cancel_reason: string | null;
+  cancel_hours_notice: number | null;
+  late_cancel: boolean | null;
+}
+
+export function fetchBookingOffers(id: string) {
+  return adminFetch<{ data: { items: OfferLogItem[]; counts: Record<string, number> } }>(
+    `/api/admin/bookings/${id}/offers`
+  );
+}
+
 export function assignBooking(id: string, pro_id: string) {
   return adminFetch<{ booking_id: string; status: BookingStatus; pro_id: string; pro_name: string }>(
     `/api/admin/bookings/${id}/assign`,
