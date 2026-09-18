@@ -903,16 +903,6 @@ function JobCard({
           />
         )}
         <Row label="Customer" value={j.customer_name || "—"} />
-        {j.customer_phone && (
-          <Row
-            label="Phone"
-            value={
-              <a href={`tel:${j.customer_phone}`} className="link">
-                {j.customer_phone}
-              </a>
-            }
-          />
-        )}
         <Row label="Address" value={j.address_line || `ZIP ${j.zip}`} />
         {j.notes && <Row label="Notes" value={j.notes} />}
         <Row label="Customer pays" value={`$${totalDollars}`} />
