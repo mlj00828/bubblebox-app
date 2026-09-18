@@ -413,6 +413,19 @@ export interface OfferLogItem {
   late_cancel: boolean | null;
 }
 
+export interface AdminMessage {
+  id: number;
+  sender: "customer" | "pro" | "admin";
+  body: string;
+  created_at: string;
+}
+
+export function fetchBookingMessages(id: string) {
+  return adminFetch<{ data: { messages: AdminMessage[] } }>(
+    `/api/admin/bookings/${id}/messages`
+  );
+}
+
 export function fetchBookingOffers(id: string) {
   return adminFetch<{ data: { items: OfferLogItem[]; counts: Record<string, number> } }>(
     `/api/admin/bookings/${id}/offers`
