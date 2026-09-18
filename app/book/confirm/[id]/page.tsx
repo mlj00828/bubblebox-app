@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "@/components/Chrome";
@@ -333,6 +333,10 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
         <CancelPanel id={id} phone={phone} hoursLeft={hoursLeft} onCancelled={() => setStatus("cancelled")} />
       )}
 
+      {pro?.first_name && ["confirmed", "enroute", "in_progress", "completed"].includes(status) && (
+        <MessageThread id={id} phone={phone} proName={pro.first_name} />
+      )}
+      {status === "completed" && <DisputeBox id={id} phone={phone} />}
       {status === "completed" && (
         <Link href={`/review/${id}`} className="mt-4 block rounded-full py-3 text-center font-bold text-white no-underline" style={{ background: "var(--color-accent)" }}>
           ⭐ Rate your clean
@@ -507,4 +511,223 @@ function statusLabel(status: string): string {
     cancelled: "Cancelled",
   };
   return labels[status] ?? status;
+}
+
+
+// ─── Message thread ────────────────────────────────────────
+// Customer <-> cleaner, without either side seeing a phone number. Polls while
+// open so a reply appears without a refresh.
+interface ThreadMsg { id: number; sender: string; body: string; created_at: string }
+
+function MessageThread({ id, phone, proName }: { id: string; phone: string; proName: string }) {
+  const [msgs, setMsgs] = useState<ThreadMsg[]>([]);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/bookings/${id}/messages?phone=${encodeURIComponent(phone)}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (Array.isArray(j?.data?.messages)) setMsgs(j.data.messages);
+    } catch {}
+  }, [id, phone]);
+
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 20_000);
+    return () => clearInterval(iv);
+  }, [load]);
+
+  async function send() {
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/bookings/${id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, body }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setErr(j?.error?.message || "Couldn't send that message"); setBusy(false); return; }
+      setMsgs(j.data.messages);
+      setDraft("");
+    } catch {
+      setErr("Network error — try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const unreadFromPro = msgs.filter((m) => m.sender === "pro").length;
+
+  return (
+    <div className="mt-4 rounded-xl" style={{ background: "var(--color-surface)", border: "1.5px solid var(--color-surface-mid)" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit", padding: "14px 16px" }}
+      >
+        <div className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
+          💬 Message {proName} {msgs.length > 0 ? `(${msgs.length})` : ""} {open ? "▴" : "▾"}
+        </div>
+        <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+          {unreadFromPro > 0
+            ? `${proName} has sent you a message`
+            : "Gate codes, parking, anything they should know — send it here."}
+        </div>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+            {msgs.length === 0 && (
+              <div className="text-xs" style={{ color: "var(--color-muted)", padding: "8px 0" }}>
+                No messages yet.
+              </div>
+            )}
+            {msgs.map((m) => {
+              const mine = m.sender === "customer";
+              return (
+                <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+                  <div
+                    style={{
+                      background: mine ? "var(--color-accent)" : "white",
+                      color: mine ? "white" : "var(--color-ink)",
+                      border: mine ? "none" : "1px solid var(--color-rule)",
+                      borderRadius: 14,
+                      padding: "9px 13px",
+                      fontSize: 13.5,
+                      lineHeight: 1.45,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {m.body}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--color-muted)", marginTop: 2, textAlign: mine ? "right" : "left" }}>
+                    {mine ? "You" : proName} · {new Date(m.created_at + "Z").toLocaleString()}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              placeholder={`Message ${proName}…`}
+              style={{ flex: 1, padding: "11px 13px", borderRadius: 10, border: "1.5px solid var(--color-rule)", fontSize: 14, fontFamily: "inherit", outline: "none" }}
+            />
+            <button
+              onClick={send}
+              disabled={busy || !draft.trim()}
+              style={{ background: "var(--color-accent)", color: "white", border: "none", borderRadius: 50, padding: "11px 20px", fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit", opacity: busy || !draft.trim() ? 0.55 : 1 }}
+            >
+              Send
+            </button>
+          </div>
+          {err && <div className="mt-2 text-xs" style={{ color: "var(--color-danger)" }}>{err}</div>}
+          <div className="mt-2 text-xs" style={{ color: "var(--color-muted)" }}>
+            {proName} gets an email when you send. Urgent? Call (678) 820-4881.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Report a problem ──────────────────────────────────────
+// Gives an unhappy customer a path that isn't a chargeback. Raising an issue
+// also freezes the cleaner's payout until it's resolved.
+function DisputeBox({ id, phone }: { id: string; phone: string }) {
+  const REASONS: { id: string; label: string }[] = [
+    { id: "not_completed", label: "Cleaner never showed up / work not done" },
+    { id: "quality", label: "Quality of the clean" },
+    { id: "damage", label: "Damage or something missing" },
+    { id: "time", label: "Arrived very late or left early" },
+    { id: "other", label: "Something else" },
+  ];
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("quality");
+  const [details, setDetails] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/bookings/${id}/dispute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, reason, details: details.trim() || undefined }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setErr(j?.error?.message || "Couldn't send that — please call us."); setBusy(false); return; }
+      setMsg(j.data.message);
+    } catch {
+      setErr("Network error — please call (678) 820-4881.");
+      setBusy(false);
+    }
+  }
+
+  if (msg) {
+    return (
+      <div className="mt-4 rounded-xl px-4 py-3 text-sm font-semibold" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d" }}>
+        ✓ {msg}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textDecoration: "underline", fontFamily: "inherit" }}
+        >
+          Something wasn&apos;t right with this clean?
+        </button>
+      ) : (
+        <div className="rounded-xl px-4 py-4" style={{ background: "#fffbeb", border: "1px solid #fde68a" }}>
+          <div className="text-sm font-bold" style={{ color: "#92400e" }}>Tell us what happened</div>
+          <p className="mt-1 text-xs" style={{ color: "#b45309" }}>
+            We guarantee our work — if something was missed we&apos;ll come back within 24 hours at no charge.
+          </p>
+          <select
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            style={{ width: "100%", marginTop: 10, padding: "10px 12px", borderRadius: 10, border: "1.5px solid #fde68a", fontSize: 14, fontFamily: "inherit", background: "white" }}
+          >
+            {REASONS.map((r) => (
+              <option key={r.id} value={r.id}>{r.label}</option>
+            ))}
+          </select>
+          <textarea
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+            rows={3}
+            placeholder="Any details that would help us fix it"
+            style={{ width: "100%", marginTop: 8, padding: "10px 12px", borderRadius: 10, border: "1.5px solid #fde68a", fontSize: 14, fontFamily: "inherit", resize: "vertical" }}
+          />
+          {err && <div className="mt-2 text-xs" style={{ color: "var(--color-danger)" }}>{err}</div>}
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => setOpen(false)} disabled={busy}
+              style={{ flex: 1, background: "white", border: "1.5px solid #fde68a", borderRadius: 50, padding: 11, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#92400e" }}>
+              Cancel
+            </button>
+            <button onClick={submit} disabled={busy}
+              style={{ flex: 2, background: "#d97706", color: "white", border: "none", borderRadius: 50, padding: 11, fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}>
+              {busy ? "Sending…" : "Report the issue"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
