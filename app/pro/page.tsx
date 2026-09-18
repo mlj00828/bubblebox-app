@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -951,7 +951,13 @@ function JobCard({
               >
                 {busy ? "…" : arrived ? "✓ Customer notified" : "🚪 I've arrived"}
               </button>
-              <button className="btn-accept" disabled={busy} onClick={() => setStatus("in_progress")}>
+              <button
+                className="btn-accept"
+                disabled={busy || !arrived}
+                title={arrived ? undefined : "Tap I've arrived first so the customer knows you're at the door"}
+                onClick={() => setStatus("in_progress")}
+                style={!arrived ? { opacity: 0.45 } : undefined}
+              >
                 {busy ? "…" : "▶ Start job"}
               </button>
             </>
@@ -989,6 +995,9 @@ function JobCard({
             Can&apos;t make this job?
           </button>
         </div>
+      )}
+      {["confirmed", "enroute", "in_progress", "completed"].includes(j.status) && (
+        <ProMessageThread jobId={j.id} accessToken={accessToken} />
       )}
       {err && <div className="job-err">{err}</div>}
       {captureNote && <div className="job-done">{captureNote}</div>}
@@ -1736,5 +1745,119 @@ function PageStyles() {
         .hero-stats { width: 100%; justify-content: space-between; }
       }
     `}</style>
+  );
+}
+
+
+// ─── Message thread (cleaner side) ─────────────────────────
+// Talk to the customer without either of you sharing a phone number.
+interface ProThreadMsg { id: number; sender: string; body: string; created_at: string }
+
+function ProMessageThread({ jobId, accessToken }: { jobId: string; accessToken: string }) {
+  const [msgs, setMsgs] = useState<ProThreadMsg[]>([]);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const tok = await freshToken(accessToken);
+      const r = await fetch(`${API_BASE}/api/pros/me/jobs/${jobId}/messages`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (Array.isArray(j?.data?.messages)) setMsgs(j.data.messages);
+    } catch {}
+  }, [jobId, accessToken]);
+
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 20_000);
+    return () => clearInterval(iv);
+  }, [load]);
+
+  async function send() {
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const tok = await freshToken(accessToken);
+      const r = await fetch(`${API_BASE}/api/pros/me/jobs/${jobId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setErr(j?.error?.message || "Couldn't send"); setBusy(false); return; }
+      setMsgs(j.data.messages);
+      setDraft("");
+    } catch {
+      setErr("Network error — try again");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const fromCustomer = msgs.filter((m) => m.sender === "customer").length;
+
+  return (
+    <div style={{ marginTop: 12, borderTop: "1px solid #eef2f7", paddingTop: 10 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit" }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B3E" }}>
+          💬 Message customer {msgs.length ? `(${msgs.length})` : ""} {open ? "▴" : "▾"}
+        </div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>
+          {fromCustomer > 0 ? "The customer has messaged you" : "Running late, can't get in, need a code — ask here."}
+        </div>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 7, marginBottom: 9 }}>
+            {msgs.length === 0 && <div style={{ fontSize: 12, color: "#9ca3af" }}>No messages yet.</div>}
+            {msgs.map((m) => {
+              const mine = m.sender === "pro";
+              return (
+                <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+                  <div style={{
+                    background: mine ? "#1D7FE8" : "#f1f5f9",
+                    color: mine ? "white" : "#0D1B3E",
+                    borderRadius: 13, padding: "8px 12px", fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap",
+                  }}>
+                    {m.body}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2, textAlign: mine ? "right" : "left" }}>
+                    {mine ? "You" : "Customer"} · {new Date(m.created_at + "Z").toLocaleString()}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 7 }}>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              placeholder="Message the customer…"
+              style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1.5px solid #dbe4ef", fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
+            />
+            <button
+              onClick={send}
+              disabled={busy || !draft.trim()}
+              style={{ background: "#1D7FE8", color: "white", border: "none", borderRadius: 50, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit", opacity: busy || !draft.trim() ? 0.55 : 1 }}
+            >
+              Send
+            </button>
+          </div>
+          {err && <div style={{ marginTop: 7, fontSize: 12, color: "#b91c1c" }}>{err}</div>}
+        </div>
+      )}
+    </div>
   );
 }
