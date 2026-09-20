@@ -46,10 +46,24 @@ export const viewport: Viewport = {
   themeColor: "#1D7FE8",
 };
 
+// Tells Google what to call the site in search results, instead of
+// falling back to the bare domain "bubbleboxatl.com".
+const siteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "BubbleBox ATL",
+  alternateName: "BubbleBox",
+  url: SITE,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(siteSchema) }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
