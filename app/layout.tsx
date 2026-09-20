@@ -1,13 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+// Every canonical/OG URL resolves against this. Without it, Next emits
+// relative URLs and Google is free to pick its own canonical — which is
+// how bubbleboxatl.com fell out of the index.
+const SITE = "https://www.bubbleboxatl.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE),
   title: {
     default: "BubbleBox ATL — Professional Cleaning Services in Atlanta",
     template: "%s · BubbleBox ATL",
   },
   description:
-    "Atlanta's most affordable professional cleaning service. Standard cleans from $99. Book online in minutes. Background-checked, insured, satisfaction guaranteed.",
+    "Book a standard, deep, move-in/out, Airbnb turnover, office, or post-construction clean in Atlanta. Vetted, background-checked cleaners. Flat pricing from $99, booked online in minutes.",
   applicationName: "BubbleBox ATL",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -19,8 +25,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "BubbleBox ATL — Professional Cleaning Services in Atlanta",
     description:
-      "Background-checked cleaners serving Atlanta & Metro Atlanta. Book online in 60 seconds.",
-    url: "https://homeproatl.xyz",
+      "Standard, deep, move-in/out, Airbnb turnover, office and post-construction cleaning across Atlanta & Metro Atlanta. Book online in 60 seconds.",
+    url: SITE,
     siteName: "BubbleBox ATL",
     type: "website",
   },
