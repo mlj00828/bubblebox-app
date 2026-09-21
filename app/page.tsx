@@ -33,7 +33,7 @@ export default function Home() {
 
       {/* ── PROMO BANNER ── */}
       <div style={{ background: "linear-gradient(90deg, var(--color-accent-deep) 0%, var(--color-accent) 100%)", color: "white", textAlign: "center", padding: "10px 20px", fontSize: 14, fontWeight: 600 }}>
-        🧹 First-time customers get <span style={{ color: "#FFD700" }}>$20 OFF</span> — Use code <span style={{ color: "#FFD700" }}>BUBBLE20</span> at checkout!
+        🧹 First-time customers get <span style={{ color: "#FFD700" }}>$20 OFF</span> a deep clean or move-out — use code <span style={{ color: "#FFD700" }}>BUBBLE20</span> at checkout!
       </div>
 
       <main>
@@ -317,7 +317,7 @@ export default function Home() {
         <div style={{ background: "linear-gradient(135deg, var(--color-accent-deep) 0%, var(--color-accent) 100%)", padding: "80px 24px", textAlign: "center" }}>
           <div style={{ maxWidth: 600, margin: "0 auto" }}>
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(28px, 4vw, 44px)", color: "white", marginBottom: 12, letterSpacing: "-0.5px" }}>Ready for a cleaner home?</h2>
-            <p style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", marginBottom: 32, lineHeight: 1.6 }}>Book in 60 seconds. Professional cleaners serving Atlanta & Metro Atlanta. First booking gets $20 off.</p>
+            <p style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", marginBottom: 32, lineHeight: 1.6 }}>Book in 60 seconds. Professional cleaners serving Atlanta & Metro Atlanta. First deep clean or move-out gets $20 off.</p>
             <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
               <Link href="/book" style={{ background: "white", color: "var(--color-accent-deep)", border: "none", borderRadius: 50, padding: "16px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", transition: "all 0.2s" }}>Book Now — From $99 →</Link>
               <a href="tel:+16788204881" style={{ background: "transparent", color: "white", border: "2px solid rgba(255,255,255,0.5)", borderRadius: 50, padding: "16px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", transition: "all 0.2s" }}>📞 Call Us</a>
@@ -411,5 +411,5 @@ const FAQS = [
   { q: "Can I book same-day?", a: "Yes, same-day booking is available based on cleaner availability. Book before noon and we'll do our best to have someone there the same day." },
   { q: "How do recurring plans work?", a: "With a recurring plan (weekly, bi-weekly, or monthly), we lock in a discounted rate for every visit — up to 20% off. You can pause or cancel at any time with no penalty." },
   { q: "When am I charged?", a: "A pre-authorization hold is placed on your card at the time of booking to verify funds are available. This is not a charge. Your card is fully charged only after your cleaning is complete." },
-  { q: "How do I use my $20 first-booking discount?", a: "Use promo code BUBBLE20 at checkout during your first booking. The $20 discount will be applied automatically. One use per customer." },
+  { q: "How do I use my $20 first-time discount?", a: "Enter code BUBBLE20 at checkout on your first booking. It applies to deep cleans, move-in/move-out, post-construction, and any order of $169 or more. It does not apply to standard cleans. One use per customer." },
 ];
