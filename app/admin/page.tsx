@@ -162,7 +162,7 @@ export default function AdminDashboard() {
                       <td className="admin-mono">{b.preferred_window || "—"}</td>
                       <td className="cell-name">{b.customer_name || "—"}</td>
                       <td>{b.service_name || b.service_id}</td>
-                      <td><span className={`status-badge ${b.status}`}>{b.status.replace("_", " ")}</span></td>
+                      <td><span className={`status-badge ${b.status === "enroute" && b.arrived_at ? "arrived" : b.status}`}>{b.status === "enroute" && b.arrived_at ? "arrived" : b.status.replace("_", " ")}</span></td>
                       <td className="cell-money">{fmtCents(b.final_total_cents ?? b.estimated_total_cents)}</td>
                     </tr>
                   ))}
