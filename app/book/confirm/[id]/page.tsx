@@ -211,13 +211,17 @@ const TRACK_STEPS = [
   { key: "broadcasting", label: "Finding your cleaner", icon: "📡" },
   { key: "confirmed", label: "Cleaner assigned", icon: "🙋" },
   { key: "enroute", label: "On the way", icon: "🚗" },
+  { key: "arrived", label: "At your door", icon: "🚪" },
   { key: "in_progress", label: "Cleaning in progress", icon: "🧽" },
   { key: "completed", label: "Sparkling clean!", icon: "✨" },
 ];
-const STATUS_ORDER = ["requested", "broadcasting", "confirmed", "enroute", "in_progress", "completed"];
+const STATUS_ORDER = ["requested", "broadcasting", "confirmed", "enroute", "arrived", "in_progress", "completed"];
 
 function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string; initialStatus: string }) {
   const [status, setStatus] = useState(initialStatus);
+  // "Arrived" is an event, not a booking status: the cleaner is at the door but
+  // hasn't started. Shown as its own step so the customer knows to let her in.
+  const [arrived, setArrived] = useState(false);
   const [pro, setPro] = useState<{ first_name: string | null; avg_rating: number | null; photo_url?: string | null; bio?: string | null } | null>(null);
   const [preferred, setPreferred] = useState<{ first_name: string; state: string } | null>(null);
   const [available, setAvailable] = useState<TrackAddon[]>([]);
@@ -234,6 +238,8 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
         if (!r.ok || stopped) return;
         const j = await r.json();
         if (j?.data?.status) setStatus(j.data.status);
+        if (Array.isArray(j?.data?.events))
+          setArrived(j.data.events.some((e: { event_type?: string }) => e?.event_type === "pro_arrived"));
         if (j?.data?.pro) setPro(j.data.pro);
         setPreferred(j?.data?.preferred ?? null);
         if (j?.data?.available_addons) setAvailable(j.data.available_addons);
@@ -254,7 +260,8 @@ function StatusTracker({ id, phone, initialStatus }: { id: string; phone: string
     );
   }
 
-  const currentIdx = STATUS_ORDER.indexOf(status);
+  const viewStatus = status === "enroute" && arrived ? "arrived" : status;
+  const currentIdx = STATUS_ORDER.indexOf(viewStatus);
   const active = !["completed", "cancelled"].includes(status);
 
   return (
