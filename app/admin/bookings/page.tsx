@@ -149,7 +149,7 @@ export default function AdminBookingsPage() {
                       <div>{b.preferred_date}</div>
                       <div className="cell-sub">{b.preferred_window || "—"}</div>
                     </td>
-                    <td><span className={`status-badge ${b.status}`}>{b.status.replace("_", " ")}</span></td>
+                    <td><span className={`status-badge ${b.status === "enroute" && b.arrived_at ? "arrived" : b.status}`}>{b.status === "enroute" && b.arrived_at ? "arrived" : b.status.replace("_", " ")}</span></td>
                     <td><span className={`status-badge ${b.payment_status}`}>{b.payment_status}</span></td>
                     <td className="cell-money">{fmtCents(b.final_total_cents ?? b.estimated_total_cents)}</td>
                   </tr>
