@@ -337,6 +337,8 @@
 .status-badge.enroute::before { background: var(--orange); }
 .status-badge.in_progress { background: var(--orange-bg); color: var(--orange-dark); }
 .status-badge.in_progress::before { background: var(--orange); }
+.status-badge.arrived { background: var(--orange-bg); color: var(--orange-dark); }
+.status-badge.arrived::before { background: var(--orange); }
 .status-badge.completed { background: var(--green-bg); color: var(--green-dark); }
 .status-badge.completed::before { background: var(--green); }
 .status-badge.cancelled { background: var(--red-bg); color: var(--red-dark); }
