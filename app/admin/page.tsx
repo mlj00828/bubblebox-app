@@ -31,11 +31,14 @@ export default function AdminDashboard() {
       try {
         const [s, b] = await Promise.all([
           fetchStats(),
-          fetchBookings({ limit: 10 }),
+          fetchBookings({ limit: 100 }),
         ]);
         setStats(s);
-        const today = new Date().toISOString().slice(0, 10);
-        setTodayBookings(b.bookings.filter((bk) => bk.preferred_date === today));
+        // "Today" in Atlanta time, not UTC (UTC rolls over at 8 PM ET).
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+        setTodayBookings(
+          b.bookings.filter((bk) => bk.preferred_date === today && bk.status !== "cancelled")
+        );
       } catch (err) {
         if (err instanceof AdminApiError && err.status === 401) {
           router.replace("/admin/login");
