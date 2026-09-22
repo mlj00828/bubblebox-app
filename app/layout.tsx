@@ -22,6 +22,7 @@ export const metadata: Metadata = {
     title: "BubbleBox ATL",
   },
   formatDetection: { telephone: false },
+  alternates: { canonical: "./" },
   openGraph: {
     title: "BubbleBox ATL — Professional Cleaning Services in Atlanta",
     description:
