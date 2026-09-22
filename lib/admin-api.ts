@@ -57,6 +57,8 @@ export interface AdminBooking {
   payout_basis_cents?: number | null;
   created_at: string;
   updated_at: string;
+  /** When the cleaner tapped "I've arrived" (null if not yet). */
+  arrived_at?: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   customer_email: string | null;
