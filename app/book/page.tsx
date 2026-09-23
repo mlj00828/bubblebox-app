@@ -85,6 +85,10 @@ const TIME_SLOTS = ["8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 P
 
 // Minimum notice before a slot can start — gives a cleaner time to accept
 // the job and travel there.
+// Same-day online booking is off until the roster is deep enough to cover it
+// reliably (Mj: at least 25 cleaners). Same-day still happens by phone in areas
+// where we have someone free. Flip this back to true to re-enable it.
+const SAME_DAY_ENABLED = false;
 const MIN_LEAD_MINUTES = 120;
 
 function slotHour24(t: string): number {
@@ -100,12 +104,13 @@ function todayStr(): string {
   return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
 }
 
-// A slot is bookable if the date is in the future, or (today) its start time
-// is at least MIN_LEAD_MINUTES from now.
+// A slot is bookable if the date is in the future. While same-day is off,
+// today is never bookable; when it's on, today works with MIN_LEAD_MINUTES notice.
 function isSlotAvailable(dateStr: string, slot: string): boolean {
   if (!dateStr) return true;
   if (dateStr > todayStr()) return true;
   if (dateStr < todayStr()) return false;
+  if (!SAME_DAY_ENABLED) return false;
   const now = new Date();
   const earliest = now.getHours() * 60 + now.getMinutes() + MIN_LEAD_MINUTES;
   return slotHour24(slot) * 60 >= earliest;
@@ -565,7 +570,7 @@ function Step5({ state, update, calYear, calMonth, setCalYear, setCalMonth }: an
             const d = i + 1;
             const dateStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
             const date = new Date(calYear, calMonth, d);
-            const isPast = date < today;
+            const isPast = SAME_DAY_ENABLED ? date < today : date <= today;
             const isSel = state.date === dateStr;
             const isToday = date.getTime() === today.getTime();
             return (
@@ -581,7 +586,7 @@ function Step5({ state, update, calYear, calMonth, setCalYear, setCalMonth }: an
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)", marginBottom: 10 }}>Available arrival windows:</div>
         {state.date === todayStr() && !TIME_SLOTS.some(t => isSlotAvailable(state.date, t)) && (
           <div style={{ background: "var(--color-surface)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "var(--color-accent-mid)", fontWeight: 500, marginBottom: 10 }}>
-            Same-day booking is closed for today — cleaners need at least 2 hours&apos; notice. Pick tomorrow or later!
+            Same-day is available in select areas. We&apos;ll check who&apos;s free near you.
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
