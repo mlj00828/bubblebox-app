@@ -345,9 +345,10 @@ const COPY: Record<Lang, Copy> = {
   },
 };
 
-function Html({ as = "p", className, html }: { as?: "p" | "h3" | "dd" | "span"; className?: string; html: string }) {
-  const Tag = as as keyof JSX.IntrinsicElements;
-  return <Tag className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+// Some copy carries inline <strong>, so it is rendered as HTML. The strings are
+// our own constants above - nothing here comes from user input.
+function Html({ className, html }: { className?: string; html: string }) {
+  return <p className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export default function GuidePage() {
