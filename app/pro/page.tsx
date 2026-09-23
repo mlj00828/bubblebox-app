@@ -42,8 +42,10 @@ function scopeLine(j: { bedrooms?: number | null; bathrooms?: number | null; hal
 
 // Cleaners keep 80% of what the customer actually pays (post-discount).
 // Mid-job add-ons are included because they live in final_total_cents.
-function payoutBaseCents(j: { final_total_cents?: number | null; estimated_total_cents?: number | null }): number {
-  return j.final_total_cents ?? j.estimated_total_cents ?? 0;
+function payoutBaseCents(j: { payout_basis_cents?: number | null; final_total_cents?: number | null; estimated_total_cents?: number | null }): number {
+  // payout_basis_cents is set when Morgan adjusts what a job pays (e.g. she
+  // absorbs a discount); it wins over what the customer was charged.
+  return j.payout_basis_cents ?? j.final_total_cents ?? j.estimated_total_cents ?? 0;
 }
 type JobFilter = "upcoming" | "past" | "all";
 type Period = "week" | "month" | "year" | "all";
@@ -89,6 +91,7 @@ interface Job {
   notes: string | null;
   estimated_total_cents: number | null;
   final_total_cents: number | null;
+  payout_basis_cents?: number | null;
   discount_cents?: number | null;
   bedrooms?: number | null;
   bathrooms?: number | null;
