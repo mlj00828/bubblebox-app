@@ -51,7 +51,7 @@ export default function Home() {
               </h1>
 
               <p style={{ fontSize: 17, color: "var(--color-ink-mid)", lineHeight: 1.6, maxWidth: 440 }}>
-                Professional, background-checked cleaners serving Atlanta & Metro Atlanta. Book online in 60 seconds. Satisfaction guaranteed or we come back free.
+                Professional, screened and ID-verified cleaners serving Atlanta & Metro Atlanta. Book online in 60 seconds. Satisfaction guaranteed or we come back free.
               </p>
 
               {/* ZIP widget */}
@@ -104,7 +104,7 @@ export default function Home() {
         {/* ── TRUST STRIP ── */}
         <div style={{ background: "var(--color-surface)", borderTop: "1px solid var(--color-rule)", borderBottom: "1px solid var(--color-rule)", padding: "18px 24px" }}>
           <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 32, flexWrap: "wrap" }}>
-            {["✅ Background-checked cleaners","💯 Satisfaction guarantee","⚡ Same-day booking","🌿 Eco-friendly products","⭐ 4.9-star rated"].map(t => (
+            {["✅ Screened & ID-verified cleaners","💯 Satisfaction guarantee","⚡ Same-day in select areas","🌿 Eco-friendly products","⭐ 4.9-star rated"].map(t => (
               <span key={t} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-mid)", whiteSpace: "nowrap" }}>{t}</span>
             ))}
           </div>
@@ -169,7 +169,7 @@ export default function Home() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, position: "relative" }} className="steps-grid">
               {[["1","Book Online","Choose your service, pick a date & time, and enter your address. Takes less than 60 seconds."],
-                ["2","We Show Up","Your background-checked, professional cleaner arrives on time with all supplies included."],
+                ["2","We Show Up","Your screened, ID-verified cleaner arrives on time with all supplies included."],
                 ["3","Enjoy a Clean Home","Relax while we do the work. Not happy? We come back for free — no questions asked."]
               ].map(([n,title,desc]) => (
                 <div key={n} style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 16, position: "relative", zIndex: 1 }}>
@@ -405,10 +405,10 @@ const CITIES = ["Atlanta","Buckhead","Midtown","Decatur","Sandy Springs","Alphar
 
 const FAQS = [
   { q: "Do I need to be home during the cleaning?", a: "No! Many of our customers prefer to be out during their cleaning. You can provide entry instructions (key code, lockbox, etc.) in your booking notes and we'll handle the rest." },
-  { q: "Are your cleaners background-checked?", a: "Absolutely. Every BubbleBox cleaner passes a thorough background check before joining our team." },
+  { q: "How do you vet your cleaners?", a: "Every cleaner's government-issued ID is verified through our identity provider before they can accept a single job, and we review every application by hand. Cleaners also carry their own supplies and agree to our service standards before they're activated." },
   { q: "What if I'm not happy with my cleaning?", a: "We offer a 100% satisfaction guarantee. If you're not happy, let us know within 24 hours and we'll send a team back to re-clean the affected areas at no additional cost." },
   { q: "Do you bring your own supplies and equipment?", a: "Yes! Our cleaners arrive fully equipped with professional-grade supplies. Prefer to use your own? Save $10 by selecting \"I'll Provide My Own Supplies\" during booking." },
-  { q: "Can I book same-day?", a: "Yes, same-day booking is available based on cleaner availability. Book before noon and we'll do our best to have someone there the same day." },
+  { q: "Can I book same-day?", a: "Same-day is available in select areas. We'll check who's free near you." },
   { q: "How do recurring plans work?", a: "With a recurring plan (weekly, bi-weekly, or monthly), we lock in a discounted rate for every visit — up to 20% off. You can pause or cancel at any time with no penalty." },
   { q: "When am I charged?", a: "A pre-authorization hold is placed on your card at the time of booking to verify funds are available. This is not a charge. Your card is fully charged only after your cleaning is complete." },
   { q: "How do I use my $20 first-time discount?", a: "Enter code BUBBLE20 at checkout on your first booking. It applies to deep cleans, move-in/move-out, post-construction, and any order of $169 or more. It does not apply to standard cleans. One use per customer." },
