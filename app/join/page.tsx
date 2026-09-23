@@ -9,6 +9,22 @@ import { FlagSwitcher } from "@/components/FlagSwitcher";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.homeproatl.xyz";
 
+// Persona hosted ID verification. These IDs are public — they appear in the URL
+// the applicant visits. reference-id is how the Persona webhook finds the row in
+// pro_applications, so it must be the application id we just created.
+const PERSONA_TEMPLATE_ID = process.env.NEXT_PUBLIC_PERSONA_TEMPLATE_ID ?? "itmpl_AYueSBFrrkhX3QpAmPwHk2Tq57HFCC";
+const PERSONA_ENV_ID = process.env.NEXT_PUBLIC_PERSONA_ENVIRONMENT_ID ?? "env_AYueSBFKaunpQLyH3uihJod4qAvw5M";
+
+function personaVerifyUrl(applicationId: string, email: string) {
+  const q = new URLSearchParams({
+    "inquiry-template-id": PERSONA_TEMPLATE_ID,
+    "environment-id": PERSONA_ENV_ID,
+    "reference-id": applicationId,
+  });
+  if (email) q.set("fields[email-address]", email);
+  return `https://withpersona.com/verify?${q.toString()}`;
+}
+
 const SERVICE_IDS = ["standard-cleaning", "deep-cleaning", "airbnb-turnover", "move-in-out", "post-construction", "office-cleaning"];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOUR_IDS = ["morning", "afternoon", "evening", "flexible"];
@@ -28,6 +44,7 @@ export default function JoinPage() {
   const t = JOIN_COPY[lang];
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [appId, setAppId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState("");
@@ -112,6 +129,7 @@ export default function JoinPage() {
         setSubmitting(false);
         return;
       }
+      setAppId(body?.data?.id ?? null);
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
@@ -140,9 +158,26 @@ export default function JoinPage() {
                 </div>
               ))}
             </div>
-            <Link href="/" style={{ display: "inline-block", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", borderRadius: 50, padding: "14px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(29,127,232,0.35)" }}>
-              {t.backHome}
-            </Link>
+            {appId ? (
+              <>
+                <a
+                  href={personaVerifyUrl(appId, email.trim().toLowerCase())}
+                  style={{ display: "inline-block", width: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", borderRadius: 50, padding: "16px 32px", fontSize: 17, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(29,127,232,0.35)" }}
+                >
+                  {t.verifyCta}
+                </a>
+                <p style={{ fontSize: 13, color: "var(--color-ink-mid)", lineHeight: 1.5, margin: "14px 0 0" }}>
+                  {t.verifyNote}
+                </p>
+                <p style={{ fontSize: 12, color: "var(--color-ink-mid)", margin: "18px 0 0" }}>
+                  <Link href="/" style={{ color: "var(--color-ink-mid)" }}>{t.backHome}</Link>
+                </p>
+              </>
+            ) : (
+              <Link href="/" style={{ display: "inline-block", background: "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-mid) 100%)", color: "white", borderRadius: 50, padding: "14px 32px", fontSize: 16, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(29,127,232,0.35)" }}>
+                {t.backHome}
+              </Link>
+            )}
           </div>
         </main>
         <Footer />
