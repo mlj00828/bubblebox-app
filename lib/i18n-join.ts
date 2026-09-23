@@ -84,6 +84,8 @@ export interface JoinCopy {
   successTitle: string;
   successBody: string;
   successSteps: string[];
+  verifyCta: string;
+  verifyNote: string;
   backHome: string;
   // option labels
   services: Record<string, string>;
@@ -172,13 +174,15 @@ const en: JoinCopy = {
   errNetwork: "Couldn't reach the server. Please check your connection and try again.",
   successTitle: "Application submitted!",
   successBody:
-    "Thanks for applying to BubbleBox ATL! We'll review your application and reach out within 2–3 business days.",
+    "One more step: verify your ID. It takes about two minutes on your phone, and we can't approve you without it.",
   successSteps: [
-    "We'll review your application",
-    "We'll email you a link to schedule your interview",
-    "We'll verify your ID on the call",
-    "Get approved and start earning!",
+    "Verify your ID (2 minutes, below)",
+    "Pass a background check",
+    "Take the quick dashboard tour",
+    "Start accepting jobs!",
   ],
+  verifyCta: "Verify my ID now",
+  verifyNote: "Have your driver's license or state ID ready. You'll photograph it and take a selfie.",
   backHome: "Back to Home",
   services: {
     "standard-cleaning": "🧹 Standard Cleaning",
@@ -285,13 +289,15 @@ const es: JoinCopy = {
   errNetwork: "No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
   successTitle: "¡Solicitud enviada!",
   successBody:
-    "¡Gracias por aplicar a BubbleBox ATL! Revisaremos tu solicitud y te contactaremos en 2–3 días hábiles.",
+    "Falta un paso: verifica tu identificación. Toma unos dos minutos desde tu teléfono y no podemos aprobarte sin eso.",
   successSteps: [
-    "Revisaremos tu solicitud",
-    "Te enviaremos un enlace por correo para agendar tu entrevista",
-    "Verificaremos tu identificación en la llamada",
-    "¡Te aprobamos y empiezas a ganar!",
+    "Verifica tu identificación (2 minutos, abajo)",
+    "Aprueba la verificación de antecedentes",
+    "Haz el recorrido rápido del panel",
+    "¡Empieza a aceptar trabajos!",
   ],
+  verifyCta: "Verificar mi identificación",
+  verifyNote: "Ten a la mano tu licencia de conducir o identificación estatal. Le tomarás una foto y te tomarás una selfie.",
   backHome: "Volver al Inicio",
   services: {
     "standard-cleaning": "🧹 Limpieza Estándar",
@@ -398,13 +404,15 @@ const pt: JoinCopy = {
   errNetwork: "Não conseguimos conectar ao servidor. Verifique sua conexão e tente novamente.",
   successTitle: "Inscrição enviada!",
   successBody:
-    "Obrigado por se inscrever na BubbleBox ATL! Vamos analisar sua inscrição e entrar em contato em 2–3 dias úteis.",
+    "Falta um passo: verifique seu documento. Leva cerca de dois minutos no celular e não conseguimos aprovar você sem isso.",
   successSteps: [
-    "Vamos analisar sua inscrição",
-    "Enviaremos um link por e-mail para agendar sua entrevista",
-    "Verificaremos seu documento na ligação",
-    "Seja aprovado e comece a ganhar!",
+    "Verifique seu documento (2 minutos, abaixo)",
+    "Passe na verificação de antecedentes",
+    "Faça o tour rápido do painel",
+    "Comece a aceitar trabalhos!",
   ],
+  verifyCta: "Verificar meu documento",
+  verifyNote: "Tenha em mãos sua carteira de motorista ou documento com foto. Você vai fotografá-lo e tirar uma selfie.",
   backHome: "Voltar ao Início",
   services: {
     "standard-cleaning": "🧹 Limpeza Padrão",
