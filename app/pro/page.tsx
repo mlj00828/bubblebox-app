@@ -1128,6 +1128,9 @@ function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string
   const [bio, setBio] = useState(pro.bio || "");
   const [zips, setZips] = useState((pro.zip_codes || []).join(", "));
   const [photoUrl, setPhotoUrl] = useState<string | null>(pro.photo_url ?? null);
+  // Stripe Connect: cleaners link their own bank so Friday pay is direct deposit.
+  const [payout, setPayout] = useState<{ connected: boolean; payouts_enabled: boolean; details_submitted: boolean; needs?: string[] } | null>(null);
+  const [payoutBusy, setPayoutBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1146,6 +1149,34 @@ function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string
       })
       .catch(() => {});
   }, [accessToken]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/pros/me/stripe/status`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.data) setPayout(j.data); })
+      .catch(() => {});
+  }, [accessToken]);
+
+  // Sends them to Stripe's hosted onboarding. Stripe returns them to /pro.
+  async function startPayoutSetup() {
+    setPayoutBusy(true); setErr(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/pros/me/stripe/onboard`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${await freshToken(accessToken)}` },
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || !body?.data?.url) {
+        setErr(body?.error?.message || "Couldn't start payout setup — please try again.");
+        setPayoutBusy(false);
+        return;
+      }
+      window.location.href = body.data.url;
+    } catch {
+      setErr("Network error — please try again.");
+      setPayoutBusy(false);
+    }
+  }
 
   async function uploadPhoto(file: File) {
     setErr(null);
@@ -1244,6 +1275,26 @@ function ProfileTab({ pro, email, accessToken }: { pro: ProRecord; email: string
         <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} maxLength={400}
           placeholder="e.g. 8 years of residential cleaning experience. I love leaving kitchens spotless!"
           style={{ width: "100%", padding: "11px 13px", border: "1.5px solid #dbe4ef", borderRadius: 10, fontSize: 14, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
+      </div>
+
+      <div style={{ padding: "14px 0", borderBottom: "1px solid #eef2f7" }}>
+        <div className="profile-label" style={{ marginBottom: 6 }}>Getting paid</div>
+        {payout?.payouts_enabled ? (
+          <div style={{ fontSize: 13.5, color: "#15803d", fontWeight: 600 }}>
+            ✓ Direct deposit is set up. You keep 80% of every job, paid each Friday for the Wednesday&ndash;Tuesday week.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13.5, color: "#3B5280", lineHeight: 1.55, marginBottom: 10 }}>
+              {payout?.connected
+                ? "Stripe still needs a little more from you before we can send money to your account."
+                : "Add your bank account so your pay lands by direct deposit. It takes about five minutes, it's free, and nothing is taken out of your 80%."}
+            </div>
+            <button onClick={startPayoutSetup} disabled={payoutBusy} className="btn-accept" style={{ width: "100%" }}>
+              {payoutBusy ? "Opening…" : payout?.connected ? "Finish payout setup" : "Set up direct deposit"}
+            </button>
+          </>
+        )}
       </div>
 
       <div className="profile-row"><div className="profile-label">Services</div><div className="profile-value">{pro.services.length ? pro.services.join(", ") : "—"}</div></div>
