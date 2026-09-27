@@ -48,6 +48,10 @@ interface BookingState {
   cardExp: string;
   cardCvv: string;
   payConfirmed: boolean;
+  // The PaymentIntent the customer ACTUALLY confirmed. Never derive this from
+  // clientSecret at submit time - changing the promo spawns a fresh intent, and
+  // attaching that one records a payment nobody made.
+  confirmedIntentId: string | null;
   clientSecret: string | null;
   promoCode: string;
   promoDiscount: number; // cents
@@ -119,7 +123,7 @@ function isSlotAvailable(dateStr: string, slot: string): boolean {
 const STEP_NAMES = ["Choose Service","Home Size","Add-Ons","Frequency","Date & Time","Your Address","Contact Info","Payment","Review & Confirm"];
 
 function defaultState(): BookingState {
-  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"",payConfirmed:false,clientSecret:null,promoCode:"",promoDiscount:0,promoStatus:"idle",promoMessage:"" };
+  return { service:null,bedrooms:1,bathrooms:1,halfBaths:0,addons:new Set(),frequency:"once",date:"",time:"",address:"",apt:"",city:"Atlanta",zip:"",stateCode:"GA",specialInstructions:"",firstName:"",lastName:"",email:"",phone:"",payMethod:"card",cardName:"",cardNum:"",cardExp:"",cardCvv:"",payConfirmed:false,confirmedIntentId:null,clientSecret:null,promoCode:"",promoDiscount:0,promoStatus:"idle",promoMessage:"" };
 }
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -195,6 +199,15 @@ function BookPageInner() {
     setSubmitting(true);
     setServerError(null);
 
+    // Guard: a promo change after the card step clears the confirmation. Without
+    // this the booking submits against an unconfirmed intent and the capture
+    // fails days later. (bk_tueC-FlCcGlQ, Sep 2026.)
+    if (!state.payConfirmed || !state.confirmedIntentId) {
+      setServerError("Your payment needs confirming again — the total changed. Go back to the payment step and confirm your card.");
+      setSubmitting(false);
+      return;
+    }
+
     const addressLine = [state.address, state.apt].filter(Boolean).join(", ");
     const addonNames = [...state.addons].filter(id => id !== "ownsupplies").map(id => ADDONS.find(a => a.id === id)?.name).filter(Boolean);
     // Job scope, stated first so the cleaner sees it before anything else.
@@ -248,9 +261,11 @@ function BookPageInner() {
         }).catch(() => {});
       }
 
-      // Attach Stripe payment intent to the booking
-      if (state.clientSecret) {
-        const pi = state.clientSecret.split("_secret_")[0];
+      // Attach the intent the customer confirmed. If they changed the promo after
+      // confirming, confirmedIntentId is null and submit is blocked above, so we
+      // can never attach an intent that was never paid.
+      if (state.confirmedIntentId) {
+        const pi = state.confirmedIntentId;
         fetch(`${STRIPE_API_BASE}/api/payments/attach-to-booking`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -793,6 +808,7 @@ function PromoInput({ state, update, calcSubtotal }: { state: BookingState; upda
         promoMessage: result.message,
         clientSecret: null, // force payment intent re-creation with new amount
         payConfirmed: false, // user needs to re-confirm payment at new amount
+        confirmedIntentId: null, // the old confirmation no longer matches the amount
       });
     } catch (err) {
       const msg = err instanceof PromoError ? err.message : "Couldn't validate code. Try again.";
@@ -810,6 +826,7 @@ function PromoInput({ state, update, calcSubtotal }: { state: BookingState; upda
       promoMessage: "",
       clientSecret: null, // force payment intent re-creation at full price
       payConfirmed: false,
+      confirmedIntentId: null,
     });
   }
 
@@ -870,7 +887,8 @@ function StripePayInner({ state, update }: { state: BookingState; update: (p: Pa
       redirect: "if_required",
     });
     if (result.error) { setErr(result.error.message || "Payment failed"); setSubmitting(false); return; }
-    update({ payConfirmed: true });
+    const confirmedId = result.paymentIntent?.id ?? state.clientSecret!.split("_secret_")[0];
+    update({ payConfirmed: true, confirmedIntentId: confirmedId });
     setSubmitting(false);
   }
 
