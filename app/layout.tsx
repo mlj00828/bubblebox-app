@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 // Every canonical/OG URL resolves against this. Without it, Next emits
@@ -78,6 +79,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});})}`,
           }}
         />
+        {/* Page-view counts, so a quiet week can be read as traffic or funnel. */}
+        <Analytics />
       </body>
     </html>
   );
