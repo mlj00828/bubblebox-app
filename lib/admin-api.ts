@@ -455,6 +455,8 @@ export interface Payout {
   gross_cents: number;
   amount_cents: number;
   bonus_cents: number;
+  // Part of amount_cents, not on top of it — never add the two together.
+  tip_cents: number;
   status: "owed" | "paid" | "void";
   method: string | null;
   reference: string | null;
@@ -476,6 +478,7 @@ export interface PayoutSummary {
   owed_cents: number;
   paid_cents: number;
   ytd_paid_cents: number;
+  tips_cents: number;
   job_count: number;
   needs_1099: boolean;
 }
