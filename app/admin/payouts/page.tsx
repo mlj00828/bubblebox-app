@@ -106,6 +106,7 @@ export default function PayoutsPage() {
               <th>Cleaner</th>
               <th>Jobs</th>
               <th>Owed</th>
+              <th>Tips</th>
               <th>Paid ({year})</th>
               <th>Pay to</th>
               <th>W-9</th>
@@ -128,6 +129,9 @@ export default function PayoutsPage() {
                 <td>{s.job_count}</td>
                 <td style={{ fontWeight: 800, color: s.owed_cents ? "#b45309" : "#9ca3af" }}>
                   {money(s.owed_cents)}
+                </td>
+                <td style={{ color: s.tips_cents ? "#15803d" : "#9ca3af", fontWeight: s.tips_cents ? 700 : 400 }}>
+                  {s.tips_cents ? money(s.tips_cents) : "—"}
                 </td>
                 <td>
                   {money(s.ytd_paid_cents)}
@@ -209,6 +213,7 @@ export default function PayoutsPage() {
               <th>Cleaner</th>
               <th>Job</th>
               <th>Customer paid</th>
+              <th>Tip</th>
               <th>Cleaner earns</th>
               <th>Status</th>
               <th></th>
@@ -240,8 +245,14 @@ export default function PayoutsPage() {
                   </div>
                 </td>
                 <td>{money(p.gross_cents)}</td>
+                <td style={{ fontWeight: p.tip_cents > 0 ? 800 : 400, color: p.tip_cents > 0 ? "#15803d" : "#9ca3af" }}>
+                  {p.tip_cents > 0 ? money(p.tip_cents) : "—"}
+                </td>
                 <td style={{ fontWeight: 800 }}>
                   {money(p.amount_cents + (p.bonus_cents || 0))}
+                  {p.tip_cents > 0 && (
+                    <div style={{ fontSize: 10, color: "#15803d" }}>incl. {money(p.tip_cents)} tip</div>
+                  )}
                   {p.bonus_cents > 0 && (
                     <div style={{ fontSize: 10, color: "#15803d" }}>incl. {money(p.bonus_cents)} bonus</div>
                   )}
