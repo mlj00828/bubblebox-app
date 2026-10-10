@@ -914,17 +914,16 @@ function JobCard({
 
       {["confirmed", "enroute", "in_progress"].includes(j.status) && (
         <div className="job-actions">
+          {/* Oct 10 2026 (Mj): Navigate ONLY opens directions. Cleaners check the
+              route ahead of time (Jazmyne did, two days early) and that used to
+              mark the job "on my way" and email the customer. Only the
+              "On my way" button tells the customer now. */}
           {j.address_line && (j.status === "confirmed" || j.status === "enroute") && (
             <a
               className="btn-nav"
               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(j.address_line + (j.zip ? " " + j.zip : ""))}`}
               target="_blank"
               rel="noreferrer"
-              onClick={() => {
-                // Opening directions means you're leaving — set enroute in the
-                // same tap so the customer is told without a second button.
-                if (j.status === "confirmed") setStatus("enroute");
-              }}
             >
               🧭 Navigate
             </a>
